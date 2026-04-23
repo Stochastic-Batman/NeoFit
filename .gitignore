@@ -1,0 +1,19 @@
+# Node
+node_modules/
+dist/
+.svelte-kit/
+build/
+.env
+.env.*
+!.env.example
+
+# Rust / Anchor
+target/
+**/*.rs.bk
+test-ledger/
+.anchor/
+
+# Other
+.DS_Store
+.yarn
+.surfpool
