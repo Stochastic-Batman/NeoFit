@@ -60,7 +60,7 @@
 
 	<footer class="w-full border-t border-white/5 py-8 z-10">
 		<div class="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between text-[10px] uppercase tracking-[0.3em] text-white/30">
-			<p>NeoFit Protocol v2.0.5</p>
+			<p>NeoFit v0.0.1</p>
 			<p class="mt-4 md:mt-0">Powered by Solana & MoveNet</p>
 		</div>
 	</footer>

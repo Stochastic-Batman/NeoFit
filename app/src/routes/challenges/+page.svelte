@@ -51,18 +51,20 @@
 		
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 			{#each dailyChallenges as daily}
-				<div 
-					onclick={() => selectedDaily = daily.id}
-					class="p-6 border transition-all cursor-pointer {selectedDaily === daily.id ? 'border-[#43D8C9] bg-[#43D8C9]/10' : 'border-white/10 hover:border-white/30 bg-black/50'}">
-					<div class="flex justify-between items-start mb-4">
-						<h3 class="font-orbitron font-bold text-lg">{daily.title}</h3>
-						{#if selectedDaily === daily.id}
-							<div class="w-3 h-3 bg-[#43D8C9] rounded-full"></div>
-						{/if}
-					</div>
-					<p class="text-sm text-white/60 mb-4">{daily.task}</p>
-					<p class="text-xs font-mono text-[#95389E]">{daily.reward}</p>
-				</div>
+				<button 
+				    type="button"
+				    onclick={() => selectedDaily = daily.id} 
+				    class="w-full text-left p-6 border transition-all cursor-pointer {selectedDaily === daily.id ? 'border-[#43D8C9] bg-[#43D8C9]/10' : 'border-white/10 hover:border-white/30 bg-black/50'}">
+    
+				    <div class="flex justify-between items-start mb-4">
+					<h3 class="font-orbitron font-bold text-lg text-white">{daily.title}</h3>
+					{#if selectedDaily === daily.id}
+					    <div class="w-3 h-3 bg-[#43D8C9] rounded-full"></div>
+					{/if}
+				    </div>
+				    <p class="text-sm text-white/60 mb-4">{daily.task}</p>
+				    <p class="text-xs font-mono text-[#95389E]">{daily.reward}</p>
+				</button>
 			{/each}
 		</div>
 
