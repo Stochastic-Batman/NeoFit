@@ -1,7 +1,9 @@
 import type { KP, Pose } from './types'
 
+export const THRESH = 0.25
+
 export const g = (pose: Pose, name: string): KP | null =>
-	pose.keypoints.find((k) => k.name === name && k.confidence > 0.3) ?? null
+	pose.keypoints.find((k) => k.name === name && k.confidence > THRESH) ?? null
 
 export const deg = (a: KP, b: KP, c: KP): number => {
 	const [ax, ay] = [a.x - b.x, a.y - b.y]

@@ -1,24 +1,10 @@
 <script lang="ts">
-    import '../app.css';
-    import { page } from '$app/stores';
+	import '../app.css'
+	import { page } from '$app/stores'
+	import { wallet, displayAddress } from '$lib/wallet'
 
-    let { children } = $props();
-
-    const envAddress = import.meta.env.VITE_PUBLIC_WALLET_ADDRESS;
-    let walletConnected = $state(false);
-
-    let displayAddress = $derived.by(() => {
-        if (!walletConnected) return "Connect Wallet";
-        if (!envAddress) return "No Address Found";
-        return `${envAddress.slice(0, 4)}...${envAddress.slice(-4)}`;
-    });
-
-    function toggleWallet() {
-        walletConnected = !walletConnected;
-    }
+	let { children } = $props()
 </script>
-
-
 
 <div class="min-h-screen flex flex-col relative overflow-hidden">
 	<div class="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-[#95389E]/10 rounded-full blur-[120px] pointer-events-none"></div>
@@ -38,18 +24,20 @@
 
 			<div class="hidden md:flex items-center gap-8 text-sm uppercase tracking-widest font-semibold">
 				<a href="/about" class="{$page.url.pathname === '/about' ? 'text-[#43D8C9]' : 'text-white/60 hover:text-white'} transition-colors">About</a>
-				<a href="/challenges" class="{$page.url.pathname === '/challenges' ? 'text-[#43D8C9]' : 'text-white/60 hover:text-white'} transition-colors">Challenges</a>
-				{#if walletConnected}
+				{#if $wallet.connected}
+					<a href="/challenges" class="{$page.url.pathname === '/challenges' ? 'text-[#43D8C9]' : 'text-white/60 hover:text-white'} transition-colors">Challenges</a>
 					<a href="/profile" class="{$page.url.pathname === '/profile' ? 'text-[#43D8C9]' : 'text-white/60 hover:text-white'} transition-colors">Profile</a>
-	    			{/if}
+				{/if}
 			</div>
 
-
-			<button 
-			    onclick={toggleWallet}
-			    class="font-orbitron text-xs uppercase tracking-widest px-6 py-3 border transition-all duration-300 {walletConnected ? 'border-[#43D8C9] text-[#43D8C9] hover:bg-[#43D8C9]/10' : 'border-[#95389E] text-[#95389E] hover:bg-[#95389E] hover:text-white'}"
-			    style="clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);">
-			    {displayAddress}
+			<button
+				onclick={() => $wallet.connected ? wallet.disconnect() : wallet.connect()}
+				class="font-orbitron text-xs uppercase tracking-widest px-6 py-3 border transition-all duration-300
+					{$wallet.connected
+						? 'border-[#43D8C9] text-[#43D8C9] hover:bg-[#43D8C9]/10'
+						: 'border-[#95389E] text-[#95389E] hover:bg-[#95389E] hover:text-white'}"
+				style="clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);">
+				{$displayAddress}
 			</button>
 		</div>
 	</nav>
