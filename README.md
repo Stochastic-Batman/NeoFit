@@ -37,7 +37,7 @@ npm install
 npm run dev
 ```
 
-The app runs at `http://localhost:5173`. The wallet connect button is currently mocked — it reads a wallet address from the `VITE_PUBLIC_WALLET_ADDRESS` environment variable. Create `app/.env` to test wallet-gated pages:
+The app runs at `http://localhost:5173`. The wallet connect button is currently mocked - it reads a wallet address from the `VITE_PUBLIC_WALLET_ADDRESS` environment variable. Create `app/.env` to test wallet-gated pages:
 
 ```env
 VITE_PUBLIC_WALLET_ADDRESS=YourBase58WalletAddressHere
@@ -50,14 +50,14 @@ anchor build
 ```
 
 Outputs:
-- `target/deploy/neofit.so` — compiled BPF bytecode (loaded by tests)
-- `target/idl/neofit.json` — IDL used by the TypeScript client
+- `target/deploy/neofit.so` - compiled BPF bytecode (loaded by tests)
+- `target/idl/neofit.json` - IDL used by the TypeScript client
 
 You must rebuild after any change to the Rust program.
 
 ### 3. Run Smart Contract Tests
 
-Tests use LiteSVM — an in-process Solana VM. No running validator needed.
+Tests use LiteSVM - an in-process Solana VM. No running validator needed.
 
 ```bash
 cargo test -p neofit
@@ -75,7 +75,7 @@ cargo test
 # Terminal 1
 solana-test-validator
 
-# Terminal 2 — deploy after building
+# Terminal 2 - deploy after building
 anchor deploy
 ```
 
@@ -94,7 +94,7 @@ All detection runs entirely in-browser. No video is recorded or uploaded.
 | Sit-Ups | Side-on | Shoulder–hip–knee angle < 75° |
 | Jumping Jacks | Facing | Both wrists above shoulder line |
 
-MoveNet tracks 17 skeletal keypoints at the confidence threshold of 0.25. Angles are computed from the raw keypoint coordinates (flip-invariant — mirroring the video feed for UX does not affect detection).
+MoveNet tracks 17 skeletal keypoints at the confidence threshold of 0.25. Angles are computed from the raw keypoint coordinates (flip-invariant - mirroring the video feed for UX does not affect detection).
 
 
 ## On-Chain Architecture (TBD)
@@ -103,11 +103,11 @@ MoveNet tracks 17 skeletal keypoints at the confidence threshold of 0.25. Angles
 
 ### Account Types
 
-**`UserProfile` PDA** — seeds: `["user_profile", wallet_pubkey]`
+**`UserProfile` PDA** - seeds: `["user_profile", wallet_pubkey]`
 
 Stores per-user lifetime stats: username, total reps, per-exercise rep breakdown, streak days, and last workout timestamp.
 
-**`Challenge` PDA** — seeds: `["challenge", authority_pubkey, nonce]`
+**`Challenge` PDA** - seeds: `["challenge", authority_pubkey, nonce]`
 
 Created by an admin wallet. Defines the exercise type, rep target, entry fee (in lamports), prize pool, and deadline. Acts as the SOL escrow for entry fees.
 
