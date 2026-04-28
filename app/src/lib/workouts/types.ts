@@ -12,8 +12,16 @@ export type ParamDef = {
 	default: number
 }
 
+export type ExerciseDef = {
+	id: number    // the value sent in log_reps
+	slug: string  // matches the WorkoutDef.id string used inside the app
+	name: string
+	cue: string
+}
+
 export interface WorkoutDef {
-	id: string
+	id: string         // matches ExerciseDef.slug
+	onChainId: number  // matches ExerciseDef.id; sent to the Anchor program
 	name: string
 	cue: string
 	countLabel?: string
