@@ -7,7 +7,7 @@ A decentralized fitness app using **Solana** and **MoveNet** to reward real-worl
 
 | Layer | Technology |
 |---|---|
-| Smart Contracts | Rust + Anchor 1.0.1 |
+| Smart Contracts | Rust 1.95.0 + Anchor 1.0.1 |
 | Frontend | SvelteKit 2 + TypeScript + TailwindCSS 4 |
 | Computer Vision | MoveNet via ml5.js 1.0.1 |
 | On-Chain Testing | LiteSVM (in-process SVM, no validator needed) |
@@ -19,7 +19,7 @@ A decentralized fitness app using **Solana** and **MoveNet** to reward real-worl
 
 | Tool | Version |
 |---|---|
-| Rust | via `rust-toolchain.toml` (1.89.0) |
+| Rust | via `rust-toolchain.toml` (1.95.0) |
 | Anchor CLI | 1.0.1 |
 | Node.js | 24.15.0 |
 | Solana CLI | latest stable |
