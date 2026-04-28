@@ -1,6 +1,6 @@
 # NeoFit: Prove Your Reps. Own Your Progress.
 
-A decentralized fitness app using **Solana** and **MoveNet** to reward real-world movement. The frontend uses your webcam to verify exercises via computer vision. Verified reps are logged on the Solana blockchain and will earn digital rewards.
+A Solana-powered training dApp using body pose estimation to reward proper posture and training consistency. The frontend uses your webcam to verify exercises via computer vision. Verified reps are logged on the Solana blockchain and will earn digital rewards.
 
 
 ## Tech Stack
