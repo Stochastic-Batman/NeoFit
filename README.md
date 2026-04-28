@@ -88,10 +88,10 @@ All detection runs entirely in-browser. No video is recorded or uploaded.
 
 | Exercise | Camera Position | Detection Method |
 |---|---|---|
-| Squats | Side-on | Hip–knee–ankle angle < 90° |
-| Push-Ups | Side-on | Shoulder–elbow–wrist angle < 90° |
-| Pull-Ups | Facing | Shoulder–elbow–wrist angle + wrist above shoulder |
-| Sit-Ups | Side-on | Shoulder–hip–knee angle < 75° |
+| Squats | Side-on | Hip-knee-ankle angle < 90° |
+| Push-Ups | Side-on | Shoulder-elbow-wrist angle < 90° |
+| Pull-Ups | Facing | Shoulder-elbow-wrist angle + wrist above shoulder |
+| Sit-Ups | Side-on | Shoulder-hip-knee angle < 75° |
 | Jumping Jacks | Facing | Both wrists above shoulder line |
 
 MoveNet tracks 17 skeletal keypoints at the confidence threshold of 0.25. Angles are computed from the raw keypoint coordinates (flip-invariant - mirroring the video feed for UX does not affect detection).
