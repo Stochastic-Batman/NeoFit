@@ -370,16 +370,20 @@ in `Anchor.toml`.
   it directly.
 
 
-## 7. Build Order
+## 7. Instructions
 
-1. **`initialize_user`** - Creates the on-chain `UserProfile` PDA; unblocks the Profile
-   page.
-2. **`update_username`** - Lets the user set a custom handle; replaces the localStorage
-   mock in the Profile page.
-3. **`log_reps`** - Connects MoveNet output to the blockchain; unblocks the Workout page.
-4. **`create_challenge`** - Any user (or an admin script) populates the chain with
-   challenges.
-5. **`join_challenge`** - Connects the "Join Pool" UI to fee escrow.
-6. **`claim_reward`** - Implements payout logic and the double-claim guard.
-7. **`withdraw_fees` (post-MVP)** - Allows the protocol to collect its share.
-8. **Token rewards (post-MVP)** - Replaces SOL payouts with an SPL token mint.
+| Instruction | Signature | Arguments |
+| :--- | :--- | :--- |
+| **`initialize_user`** | `pub fn initialize_user(ctx: Context<InitializeUser>)` | *None (uses PDA seeds)* |
+| **`update_username`** | `pub fn update_username(ctx: Context<UpdateUsername>, new_username: String)` | `new_username: String` |
+| **`log_reps`** | `pub fn log_reps(ctx: Context<LogReps>, exercise_id: u8, count: u32)` | `exercise_id: u8, count: u32` |
+| **`create_challenge`** | `pub fn create_challenge(ctx: Context<CreateChallenge>, title: String, requirements: Vec<ExerciseRequirement>, entry_fee: u64, deadline: i64, nonce: u64)` | `title, requirements, fees, deadline, nonce` |
+| **`join_challenge`** | `pub fn join_challenge(ctx: Context<JoinChallenge>)` | *None (uses PDA seeds)* |
+| **`claim_reward`** | `pub fn claim_reward(ctx: Context<ClaimReward>)` | *None (uses PDA seeds)* |
+
+**`withdraw_fees` (post-MVP)** - Allows the protocol to collect its share.
+
+**Token rewards (post-MVP)** - Replaces SOL payouts with an SPL token mint.
+
+### The `log_reps` Context
+When I get to `log_reps`, remember `Option<Account<Enrollment>>`. This is because a user might be logging reps for their general profile *without* being in a challenge. Context struct will need to handle those accounts as optional.
