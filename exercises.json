@@ -1,0 +1,32 @@
+[
+  {
+    "id": 0,
+    "slug": "squat",
+    "name": "Squats",
+    "cue": "Stand side-on to the camera so your knee angle is visible."
+  },
+  {
+    "id": 1,
+    "slug": "pushup",
+    "name": "Push-Ups",
+    "cue": "Get into a plank facing sideways so your elbow angle is visible."
+  },
+  {
+    "id": 2,
+    "slug": "pullup",
+    "name": "Pull-Ups",
+    "cue": "Face the camera with your full upper body visible while hanging from the bar."
+  },
+  {
+    "id": 3,
+    "slug": "situp",
+    "name": "Sit-Ups",
+    "cue": "Lie sideways to the camera so your hip and knee are visible. Knees bent."
+  },
+  {
+    "id": 4,
+    "slug": "jumping_jack",
+    "name": "Jumping Jacks",
+    "cue": "Face the camera straight on with your full body visible."
+  }
+]
