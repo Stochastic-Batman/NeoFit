@@ -18,4 +18,8 @@ pub mod neofit {
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         initialize::handler(ctx)
     }
+
+    pub fn initialize_user(ctx: Context<InitializeUser>) -> Result<()> {
+        initialize_user::handler(ctx)
+    }
 }
