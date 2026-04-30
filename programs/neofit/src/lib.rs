@@ -26,4 +26,8 @@ pub mod neofit {
     pub fn update_username(ctx: Context<UpdateUsername>, new_username: String) -> Result<()> {
         update_username::handler(ctx, new_username)
     }   
+
+    pub fn log_reps(ctx: Context<LogReps>, exercise_id: u8, count: u32) -> Result<()> {
+        log_reps::handler(ctx, exercise_id, count)
+    }
 }
