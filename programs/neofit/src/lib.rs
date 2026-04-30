@@ -22,4 +22,8 @@ pub mod neofit {
     pub fn initialize_user(ctx: Context<InitializeUser>) -> Result<()> {
         initialize_user::handler(ctx)
     }
+
+    pub fn update_username(ctx: Context<UpdateUsername>, new_username: String) -> Result<()> {
+        update_username::handler(ctx, new_username)
+    }   
 }
