@@ -1,11 +1,12 @@
+pub mod claim_reward;
+pub mod create_challenge;
 pub mod initialize;
 pub mod initialize_user;
-pub mod update_username;
+pub mod join_challenge;
 pub mod log_reps;
-pub mod create_challenge;
+pub mod update_username;
 
-pub use initialize::*;
-pub use initialize_user::*;
-pub use update_username::*;
-pub use log_reps::*;
-pub use create_challenge::*;
+pub use {
+    claim_reward::*, create_challenge::*, initialize::*, initialize_user::*,
+    join_challenge::*, log_reps::*, update_username::*,
+};

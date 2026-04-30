@@ -34,4 +34,12 @@ pub mod neofit {
     pub fn create_challenge(ctx: Context<CreateChallenge>, title: String, requirements: Vec<ExerciseRequirement>, entry_fee: u64, deadline: i64, nonce; u64) -> Result<()> {
         create_challenge::handler(ctx, title, requirements, entry_fee, deadline, nonce)
     } 
+
+    pub fn join_challenge(ctx: Context<JoinChallenge>) -> Result<()> {
+        join_challenge::handler(ctx)
+    }
+
+    pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
+        claim_reward::handler(ctx)
+    }
 }
