@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
-use crate::constants::*;
 
 
 #[derive(Accounts)]
@@ -9,7 +8,7 @@ pub struct InitializeUser<'info> {
         init,
         payer = authority,
         space = 8 + 32 + 26 + 8 + 504 + 8 + 4 + 1,
-        seeds = [SEED_USER_PROFILE, authority.key().as_ref()].
+        seeds = [SEED_USER_PROFILE, authority.key().as_ref()],
         bump
     )]
     pub user_profile: Account<'info, UserProfile>,
@@ -26,7 +25,7 @@ pub fn handler(ctx: Context<InitializeUser>) -> Result<()> {
     let authority_key = ctx.accounts.authority.key().to_string();
 
     user_profile.username = format!(
-        "{}default_as_irl{}", &authority_key[..4]. &authority_key[authority_key.len() - 4..]
+        "{}default_as_irl{}", &authority_key[..4], &authority_key[authority_key.len() - 4..]
     );
 
     user_profile.authority = ctx.accounts.authority.key();

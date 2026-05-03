@@ -31,7 +31,7 @@ pub mod neofit {
         log_reps::handler(ctx, exercise_id, count)
     }
 
-    pub fn create_challenge(ctx: Context<CreateChallenge>, title: String, requirements: Vec<ExerciseRequirement>, entry_fee: u64, deadline: i64, nonce; u64) -> Result<()> {
+    pub fn create_challenge(ctx: Context<CreateChallenge>, title: String, requirements: Vec<ExerciseRequirement>, entry_fee: u64, deadline: i64, nonce: u64) -> Result<()> {
         create_challenge::handler(ctx, title, requirements, entry_fee, deadline, nonce)
     } 
 
