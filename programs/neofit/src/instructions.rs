@@ -6,6 +6,8 @@ pub mod join_challenge;
 pub mod log_reps;
 pub mod update_username;
 
+
+#[allow(ambiguous_glob_reexports)]
 pub use {
     claim_reward::*, create_challenge::*, initialize::*, initialize_user::*,
     join_challenge::*, log_reps::*, update_username::*,
