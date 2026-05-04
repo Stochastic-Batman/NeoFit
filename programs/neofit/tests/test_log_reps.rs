@@ -49,7 +49,8 @@ fn initialize_user(svm: &mut LiteSVM, payer: &Keypair) -> Pubkey {
     pda
 }
 
-fn log_reps(svm: &mut LiteSVM, payer: &Keypair, exercise_id: u8, count: u32) -> litesvm::error::LiteSVMError {
+#[allow(dead_code)]
+fn log_reps(svm: &mut LiteSVM, payer: &Keypair, exercise_id: u8, count: u32) -> bool {
     let pda = derive_user_profile(&payer.pubkey());
     let ix = Instruction::new_with_bytes(
         neofit::id(),
@@ -65,12 +66,7 @@ fn log_reps(svm: &mut LiteSVM, payer: &Keypair, exercise_id: u8, count: u32) -> 
     let blockhash = svm.latest_blockhash();
     let msg = Message::new_with_blockhash(&[ix], Some(&payer.pubkey()), &blockhash);
     let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &[payer]).unwrap();
-    match svm.send_transaction(tx) {
-        Ok(_) => litesvm::error::LiteSVMError::TransactionError(
-            solana_transaction_error::TransactionError::AlreadyProcessed,
-        ),
-        Err(e) => e,
-    }
+    svm.send_transaction(tx).is_ok()
 }
 
 fn log_reps_ok(svm: &mut LiteSVM, payer: &Keypair, exercise_id: u8, count: u32) {
@@ -98,9 +94,9 @@ fn get_profile(svm: &LiteSVM, pda: &Pubkey) -> UserProfile {
 }
 
 fn set_clock(svm: &mut LiteSVM, unix_timestamp: i64) {
-    let clock = solana_sdk::clock::Clock {
+    let clock = anchor_lang::solana_program::clock::Clock {
         unix_timestamp,
-        ..solana_sdk::clock::Clock::default()
+        ..anchor_lang::solana_program::clock::Clock::default()
     };
     svm.set_sysvar(&clock);
 }

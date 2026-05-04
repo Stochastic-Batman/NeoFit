@@ -250,9 +250,9 @@ fn test_join_expired_challenge_fails() {
     let challenge_pda = create_challenge(&mut svm, &user, 0, single_req(0, 10), 0, soon);
     let enrollment_pda = derive_enrollment(&challenge_pda, &user.pubkey());
 
-    let clock = solana_sdk::clock::Clock {
+    let clock = anchor_lang::solana_program::clock::Clock {
         unix_timestamp: soon + 1,
-        ..solana_sdk::clock::Clock::default()
+        ..anchor_lang::solana_program::clock::Clock::default()
     };
     svm.set_sysvar(&clock);
 
