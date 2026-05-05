@@ -4,7 +4,7 @@ use {
         InstructionData, ToAccountMetas,
     },
     litesvm::LiteSVM,
-    neofit::state::{Enrollment, ExerciseRequirement},
+    neofit::state::{Challenge, Enrollment, ExerciseRequirement},
     solana_keypair::Keypair,
     solana_message::{Message, VersionedMessage},
     solana_signer::Signer,
@@ -29,8 +29,12 @@ fn new_funded_user(svm: &mut LiteSVM) -> Keypair {
 }
 
 fn send(svm: &mut LiteSVM, ix: Instruction, signer: &Keypair) -> bool {
+    send_ixs(svm, &[ix], signer)
+}
+
+fn send_ixs(svm: &mut LiteSVM, ixs: &[Instruction], signer: &Keypair) -> bool {
     let blockhash = svm.latest_blockhash();
-    let msg = Message::new_with_blockhash(&[ix], Some(&signer.pubkey()), &blockhash);
+    let msg = Message::new_with_blockhash(ixs, Some(&signer.pubkey()), &blockhash);
     let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &[signer]).unwrap();
     match svm.send_transaction(tx) {
         Ok(_) => true,
@@ -106,7 +110,13 @@ fn create_challenge(
 fn join_challenge(svm: &mut LiteSVM, user: &Keypair, challenge_pda: Pubkey) -> Pubkey {
     let profile = derive_user_profile(&user.pubkey());
     let enrollment = derive_enrollment(&challenge_pda, &user.pubkey());
-    let ix = Instruction::new_with_bytes(
+
+    let raw = svm.get_account(&challenge_pda).expect("Challenge must exist");
+    let challenge = Challenge::try_deserialize(&mut raw.data.as_ref()).unwrap();
+
+    let mut ixs = Vec::new();
+
+    ixs.push(Instruction::new_with_bytes(
         neofit::id(),
         &neofit::instruction::JoinChallenge {}.data(),
         neofit::accounts::JoinChallenge {
@@ -117,8 +127,17 @@ fn join_challenge(svm: &mut LiteSVM, user: &Keypair, challenge_pda: Pubkey) -> P
             system_program: anchor_lang::solana_program::system_program::ID,
         }
         .to_account_metas(None),
-    );
-    assert!(send(svm, ix, user), "join_challenge must succeed");
+    ));
+
+    if challenge.entry_fee_lamports > 0 {
+        ixs.push(anchor_lang::solana_program::system_instruction::transfer(
+            &user.pubkey(),
+            &challenge_pda,
+            challenge.entry_fee_lamports,
+        ));
+    }
+
+    assert!(send_ixs(svm, &ixs, user), "join_challenge must succeed");
     enrollment
 }
 
@@ -266,12 +285,13 @@ fn test_claim_reward_payout_single_completer() {
 
     // pool = 1 SOL; net = 0.9 SOL (10% protocol fee); 1 completer gets 0.9 SOL
     let expected_share = entry_fee * 9_000 / 10_000;
+    let tx_fee = 5_000u64;
     let user_lamports_after = lamports(&svm, &user.pubkey());
     let challenge_lamports_after = lamports(&svm, &challenge_pda);
 
     assert_eq!(
         user_lamports_after,
-        user_lamports_before + expected_share,
+        user_lamports_before + expected_share - tx_fee,
         "user must receive net pool minus protocol fee"
     );
     assert_eq!(
@@ -304,7 +324,7 @@ fn test_claim_reward_payout_splits_among_completers() {
         let ix = claim_reward_ix(enrollment, challenge_pda, user.pubkey());
         assert!(send(&mut svm, ix, user));
         let after = lamports(&svm, &user.pubkey());
-        assert_eq!(after, before + expected_per_user, "each completer must receive an equal share");
+        assert_eq!(after, before + expected_per_user - 5_000, "each completer must receive an equal share");
     }
 }
 

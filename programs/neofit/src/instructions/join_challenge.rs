@@ -40,18 +40,10 @@ pub fn handler(ctx: Context<JoinChallenge>) -> Result<()> {
     require!(Clock::get()?.unix_timestamp < challenge.deadline_ts, ErrorCode::ChallengeExpired);
 
     if challenge.entry_fee_lamports > 0 {
-        anchor_lang::solana_program::program::invoke(
-            &anchor_lang::solana_program::system_instruction::transfer(
-                ctx.accounts.authority.key,
-                &challenge.key(),
-                challenge.entry_fee_lamports,
-            ),
-            &[
-                ctx.accounts.authority.to_account_info(),
-                challenge.to_account_info(),
-            ],
-        )?;
-        challenge.pool_lamports = challenge.pool_lamports.checked_add(challenge.entry_fee_lamports).ok_or(ErrorCode::Overflow)?;
+        let fee = challenge.entry_fee_lamports;
+        challenge.pool_lamports = challenge.pool_lamports
+            .checked_add(fee)
+            .ok_or(ErrorCode::Overflow)?;
     }
 
     enrollment.user = ctx.accounts.authority.key();
@@ -59,7 +51,7 @@ pub fn handler(ctx: Context<JoinChallenge>) -> Result<()> {
 
     let mut initial_reps = Vec::new();
     for req in challenge.requirements.iter() {
-        initial_reps.push(ExerciseCount { exercise_id: req.exercise_id , count: 0, });
+        initial_reps.push(ExerciseCount { exercise_id: req.exercise_id, count: 0 });
     }
 
     enrollment.reps_logged = initial_reps;

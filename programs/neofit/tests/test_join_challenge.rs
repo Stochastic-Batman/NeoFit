@@ -29,8 +29,12 @@ fn new_funded_user(svm: &mut LiteSVM) -> Keypair {
 }
 
 fn send(svm: &mut LiteSVM, ix: Instruction, signer: &Keypair) -> bool {
+    send_ixs(svm, &[ix], signer)
+}
+
+fn send_ixs(svm: &mut LiteSVM, ixs: &[Instruction], signer: &Keypair) -> bool {
     let blockhash = svm.latest_blockhash();
-    let msg = Message::new_with_blockhash(&[ix], Some(&signer.pubkey()), &blockhash);
+    let msg = Message::new_with_blockhash(ixs, Some(&signer.pubkey()), &blockhash);
     let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &[signer]).unwrap();
     svm.send_transaction(tx).is_ok()
 }
@@ -209,8 +213,13 @@ fn test_join_paid_challenge_transfers_fee() {
     let joiner_lamports_before = svm.get_account(&joiner.pubkey()).unwrap().lamports;
     let challenge_lamports_before = svm.get_account(&challenge_pda).unwrap().lamports;
 
-    let ix = join_challenge_ix(joiner_profile, challenge_pda, enrollment_pda, joiner.pubkey());
-    assert!(send(&mut svm, ix, &joiner));
+    let join_ix = join_challenge_ix(joiner_profile, challenge_pda, enrollment_pda, joiner.pubkey());
+    let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
+        &joiner.pubkey(),
+        &challenge_pda,
+        entry_fee,
+    );
+    assert!(send_ixs(&mut svm, &[join_ix, transfer_ix], &joiner));
 
     let joiner_lamports_after = svm.get_account(&joiner.pubkey()).unwrap().lamports;
     let challenge_lamports_after = svm.get_account(&challenge_pda).unwrap().lamports;
@@ -233,8 +242,13 @@ fn test_join_multiple_users_accumulates_pool() {
         let joiner = new_funded_user(&mut svm);
         let profile = initialize_user(&mut svm, &joiner);
         let enrollment = derive_enrollment(&challenge_pda, &joiner.pubkey());
-        let ix = join_challenge_ix(profile, challenge_pda, enrollment, joiner.pubkey());
-        assert!(send(&mut svm, ix, &joiner));
+        let join_ix = join_challenge_ix(profile, challenge_pda, enrollment, joiner.pubkey());
+        let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
+            &joiner.pubkey(),
+            &challenge_pda,
+            entry_fee,
+        );
+        assert!(send_ixs(&mut svm, &[join_ix, transfer_ix], &joiner));
     }
 
     let challenge = get_challenge(&svm, &challenge_pda);
