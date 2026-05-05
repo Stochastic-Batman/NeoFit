@@ -46,6 +46,21 @@ pub fn handler(ctx: Context<LogReps>, exercise_id: u8, count: u32) -> Result<()>
         user_profile.rep_counts.push(ExerciseCount { exercise_id, count });
     }
 
+    let now = Clock::get()?.unix_timestamp;
+    let today = now / 86_400;
+    let last_day = user_profile.last_workout_ts / 86_400;
+
+    if user_profile.last_workout_ts == 0 {
+        user_profile.streak_days = 1;
+    } else if today == last_day {
+        // Same day - no change
+    } else if today == last_day + 1 {
+        user_profile.streak_days = user_profile.streak_days.checked_add(1).ok_or(ErrorCode::Overflow)?;
+    } else {
+        user_profile.streak_days = 1;
+    }
+    user_profile.last_workout_ts = now;
+
     if let (Some(enrollment), Some(challenge)) = (&mut ctx.accounts.enrollment, &mut ctx.accounts.challenge) {
         require!(challenge.is_active, ErrorCode::ChallengeInactive);
         require!(Clock::get()?.unix_timestamp <= challenge.deadline_ts, ErrorCode::ChallengeExpired);

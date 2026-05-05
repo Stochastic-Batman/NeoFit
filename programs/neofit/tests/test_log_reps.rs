@@ -99,6 +99,7 @@ fn set_clock(svm: &mut LiteSVM, unix_timestamp: i64) {
         ..anchor_lang::solana_program::clock::Clock::default()
     };
     svm.set_sysvar(&clock);
+    svm.expire_blockhash();
 }
 
 #[test]
