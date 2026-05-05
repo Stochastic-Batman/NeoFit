@@ -1,312 +1,6 @@
-# NeoFit - Anchor Backend Roadmap
+# NeoFit - Client Generation & Frontend Integration Roadmap
 
-## 1. Target File Structure
-
-Two small structs are used across multiple account types. Both derive the standard Anchor
-and Borsh traits and live at the top of `state.rs`.
-
-Given:
-
-1. Pairs an exercise identifier with a rep total. Used in `UserProfile.rep_counts` and
-`Enrollment.reps_logged`:
-
-```rust
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
-pub struct ExerciseCount {
-    pub exercise_id: u8,
-    pub count: u32,
-}
-// serialized size: 5 bytes per entry
-```
-
-2. Pairs an exercise identifier with the number of reps needed to satisfy it. Used in
-`Challenge.requirements`:
-
-```rust
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-pub struct ExerciseRequirement {
-    pub exercise_id: u8,
-    pub rep_target: u16,
-}
-// serialized size: 3 bytes per entry
-```
-
-
-```
-exercises.json              <- Single source of truth for exercise definitions.
-
-programs/neofit/src/
-├── lib.rs                  <- Adds pub fn entries for each new instruction.
-├── constants.rs            <- SEED_USER_PROFILE, SEED_CHALLENGE, SEED_ENROLLMENT,
-│                              MAX_USERNAME_LEN, MAX_EXERCISE_ID, MAX_REQUIREMENTS,
-│                              MAX_EXERCISES_TRACKED, PROTOCOL_FEE_BPS.
-├── error.rs                <- NotAuthorized, ChallengeExpired, AlreadyClaimed,
-│                              ChallengeInactive, InsufficientFunds, InvalidExerciseId,
-│                              TooManyRequirements, UsernameTooLong, Overflow.
-├── state.rs                <- ExerciseCount, ExerciseRequirement, UserProfile,
-│                              Challenge, Enrollment structs.
-├── instructions.rs         <- pub mod + pub use for every instruction below.
-└── instructions/
-    ├── initialize.rs       <- Kept as-is placeholder; can be deleted post-MVP.
-    ├── initialize_user.rs  <- Creates a UserProfile PDA with a derived default username.
-    ├── update_username.rs  <- Lets the user set a custom username after initialisation.
-    ├── log_reps.rs         <- Increments rep count, updates streak, checks completion.
-    ├── create_challenge.rs <- Any user creates a Challenge PDA.
-    ├── join_challenge.rs   <- User pays entry fee, creates Enrollment PDA.
-    └── claim_reward.rs     <- Verified completer claims their SOL share.
-
-programs/neofit/tests/
-├── test_initialize.rs          <- Existing placeholder test.
-├── test_initialize_user.rs
-├── test_update_username.rs
-├── test_log_reps.rs
-├── test_create_challenge.rs
-├── test_join_challenge.rs
-└── test_claim_reward.rs
-```
-
-## 2. Account Structs (`src/state.rs`)
-
-### `UserProfile`
-
-PDA seeds: `[SEED_USER_PROFILE, authority_pubkey]`
-
-| Field | Type | Bytes | Purpose |
-| --- | --- | --- | --- |
-| `authority` | `Pubkey` | 32 | Wallet that owns this profile. |
-| `username` | `String` | 26 | `4 + MAX_USERNAME_LEN`. |
-| `total_reps` | `u64` | 8 | Lifetime verified reps across all exercises. |
-| `rep_counts` | `Vec<ExerciseCount>` | 504 | `4 + MAX_EXERCISES_TRACKED (100) * 5`. |
-| `last_workout_ts` | `i64` | 8 | Unix timestamp of last session, for streak logic. |
-| `streak_days` | `u32` | 4 | Current daily streak. |
-| `bump` | `u8` | 1 | Stored PDA bump. |
-
-**Total space:** `8 + 32 + 26 + 8 + 504 + 8 + 4 + 1 = 591 bytes`
-
-**Note:** `rep_counts` is sparse. On `log_reps`, the instruction searches for an
-existing entry matching `exercise_id`; if none is found and the vec length is below
-`MAX_EXERCISES_TRACKED`, a new `ExerciseCount` is pushed. The profile page displays only
-entries that exist.
-
-
-### `Challenge`
-
-PDA seeds: `[SEED_CHALLENGE, authority_pubkey, nonce.to_le_bytes()]`
-
-The `nonce: u64` argument keeps seeds unique across multiple challenges from the same
-authority. A `title`-based seed would work for a user's first challenge, but if they
-create a second challenge with the same title - or update and redeploy one - the derived
-address would collide with the existing account, causing `init` to fail. A monotonically
-incrementing `u64` nonce, tracked off-chain by the creator's client, guarantees a fresh
-address every time without any coordination with the program. The nonce is passed both as
-a seed (for address derivation) and stored in the account so the TypeScript PDA helper can
-reconstruct the address later.
-
-| Field | Type | Bytes | Purpose |
-| --- | --- | --- | --- |
-| `authority` | `Pubkey` | 32 | Creator; only they can toggle `is_active`. |
-| `title` | `String` | 36 | `4 + 32`. |
-| `requirements` | `Vec<ExerciseRequirement>` | 49 | `4 + MAX_REQUIREMENTS (15) * 3`. Defines which exercises and how many reps of each are needed. |
-| `entry_fee_lamports` | `u64` | 8 | SOL cost to join. Zero means free. |
-| `pool_lamports` | `u64` | 8 | Total entry fees collected so far. |
-| `completers` | `u32` | 4 | Count of users who have satisfied all requirements. |
-| `deadline_ts` | `i64` | 8 | Unix timestamp; instructions reject calls after this. |
-| `is_active` | `bool` | 1 | Creator kill-switch. |
-| `nonce` | `u64` | 8 | Stored so the TypeScript PDA helper can reconstruct the address. |
-| `bump` | `u8` | 1 | Stored PDA bump. |
-
-**Total space:** `8 + 32 + 36 + 49 + 8 + 8 + 4 + 8 + 1 + 8 + 1 = 163 bytes`
-
-
-### `Enrollment`
-
-PDA seeds: `[SEED_ENROLLMENT, challenge_pubkey, user_pubkey]`
-
-| Field | Type | Bytes | Purpose |
-| --- | --- | --- | --- |
-| `user` | `Pubkey` | 32 | |
-| `challenge` | `Pubkey` | 32 | |
-| `reps_logged` | `Vec<ExerciseCount>` | 79 | `4 + MAX_REQUIREMENTS (15) * 5`. Pre-populated at join time with one zeroed entry per requirement; positions correspond to `challenge.requirements` positions. |
-| `completed` | `bool` | 1 | Set to `true` by `log_reps` when all requirements are met; never set by the frontend. |
-| `reward_claimed` | `bool` | 1 | Double-claim guard. |
-| `bump` | `u8` | 1 | |
-
-**Total space:** `8 + 32 + 32 + 79 + 1 + 1 + 1 = 154 bytes`
-
-**Design note:** `reps_logged` is pre-populated (not sparse) so that `log_reps` can
-update by index rather than search. Entry at index `i` tracks progress toward
-`challenge.requirements[i]`. `completed` is derived entirely on-chain; the frontend
-cannot set it.
-
-
-## 3. Instructions
-
-### `initialize_user`
-
-**Caller:** The user, once, on first wallet connection.
-
-**Accounts context:**
-```
-user_profile:   Account<UserProfile>  [init, seeds = [SEED_USER_PROFILE, authority.key()], bump]
-authority:      Signer
-system_program: Program<System>
-```
-
-**Instruction arguments:** none.
-
-The public key does not need to be passed as an argument - `authority.key()` is already
-available in the accounts context because `authority` is a required `Signer`. The runtime
-enforces that the signer's key matches what was used to derive the PDA, so no separate
-input is needed.
-
-**Logic:**
-1. A default username is constructed on-chain from `authority.key()`:
-   `format!("user_{}{}", &addr[..4], &addr[addr.len()-4..])` where `addr` is the
-   base58-encoded pubkey. This produces a string like `user_7xKf...mQ3z` which is always
-   unique per wallet and always fits within 22 characters.
-2. `authority` is stored. `total_reps = 0`, `rep_counts = vec![]`, `streak_days = 0`,
-   `last_workout_ts = 0`.
-3. `bump` is stored as `ctx.bumps.user_profile`.
-
-
-### `update_username`
-
-**Caller:** The profile owner, any time after `initialize_user`.
-
-**Accounts context:**
-```
-user_profile: Account<UserProfile>  [mut, seeds = [SEED_USER_PROFILE, authority.key()], has_one = authority]
-authority:    Signer
-```
-
-**Instruction arguments:** `new_username: String`
-
-**Logic:**
-1. `new_username.len() >= 1 && new_username.len() <= MAX_USERNAME_LEN` is validated;
-   returns `ErrorCode::UsernameTooLong` (or a new `UsernameTooShort`) otherwise.
-2. `user_profile.username = new_username`.
-
-The frontend Profile page's existing "Edit handle" UI calls this instruction instead of
-writing to localStorage.
-
-
-### `log_reps`
-
-**Caller:** The user at the end of a workout session. Optionally also updates an
-enrollment if the user is participating in a challenge.
-
-**Accounts context:**
-```
-user_profile:  Account<UserProfile>  [mut, seeds = [...], has_one = authority]
-authority:     Signer
-clock:         Sysvar<Clock>
-// Optional - only required when the user is in a challenge:
-enrollment:    Option<Account<Enrollment>>  [mut, seeds = [...]]
-challenge:     Option<Account<Challenge>>
-```
-
-**Instruction arguments:** `exercise_id: u8`, `count: u32`
-
-**Logic:**
-1. `exercise_id < MAX_EXERCISE_ID` is validated (`MAX_EXERCISE_ID = 5` means valid IDs
-   are 0–4); returns `ErrorCode::InvalidExerciseId`.
-2. `count` is added to `user_profile.total_reps` using `checked_add`.
-3. `user_profile.rep_counts` is searched for an entry with matching `exercise_id`. If
-   found, its `count` is incremented with `checked_add`. If not found and
-   `rep_counts.len() < MAX_EXERCISES_TRACKED`, a new `ExerciseCount` is pushed.
-4. **Streak logic** (using `clock.unix_timestamp`):
-   - `now_day = ts / 86_400`, `last_day = last_workout_ts / 86_400`.
-   - If `last_workout_ts == 0` -> `streak_days = 1`.
-   - If `now_day == last_day` -> streak unchanged.
-   - If `now_day == last_day + 1` -> `streak_days` incremented.
-   - If `now_day > last_day + 1` -> `streak_days = 1` (streak broken).
-5. `last_workout_ts` is updated to `now`.
-6. **If `enrollment` and `challenge` accounts are present:**
-   - The position `i` in `enrollment.reps_logged` whose `exercise_id` matches is found.
-   - `enrollment.reps_logged[i].count` is incremented with `checked_add`.
-   - If `enrollment.completed` is already `true`, step 6 is skipped entirely.
-   - After the update, all entries in `enrollment.reps_logged` are checked against
-     `challenge.requirements[i].rep_target`. If every entry satisfies its target,
-     `enrollment.completed = true` and `challenge.completers` is incremented.
-
-
-### `create_challenge`
-
-**Caller:** Any wallet. Challenges are open to create; the frontend only promotes
-sponsored ones. The `authority` field on the stored account identifies the creator and is
-the only wallet that can later toggle `is_active`.
-
-**Accounts context:**
-```
-challenge:      Account<Challenge>  [init, seeds = [SEED_CHALLENGE, authority.key(), nonce.to_le_bytes()], bump]
-authority:      Signer
-system_program: Program<System>
-clock:          Sysvar<Clock>
-```
-
-**Instruction arguments:**
-`title: String`, `requirements: Vec<ExerciseRequirement>`, `entry_fee_lamports: u64`,
-`deadline_ts: i64`, `nonce: u64`
-
-**Logic:**
-1. `requirements.len() >= 1 && requirements.len() <= MAX_REQUIREMENTS` is validated;
-   returns `ErrorCode::TooManyRequirements`.
-2. Each entry in `requirements` is validated: `exercise_id < MAX_EXERCISE_ID` and
-   `rep_target > 0`.
-3. `deadline_ts > clock.unix_timestamp` is validated; returns `ErrorCode::ChallengeExpired`.
-4. All fields are stored; `pool_lamports = 0`, `completers = 0`, `is_active = true`,
-   `nonce` is stored for later PDA reconstruction.
-
-
-### `join_challenge`
-
-**Caller:** A user entering an active challenge.
-
-**Accounts context:**
-```
-enrollment:     Account<Enrollment>   [init, seeds = [SEED_ENROLLMENT, challenge.key(), authority.key()], bump]
-challenge:      Account<Challenge>    [mut]
-user_profile:   Account<UserProfile>  [seeds = [...], has_one = authority]
-authority:      Signer
-system_program: Program<System>
-clock:          Sysvar<Clock>
-```
-
-**Logic:**
-1. `challenge.is_active == true` is checked; returns `ErrorCode::ChallengeInactive`.
-2. `clock.unix_timestamp < challenge.deadline_ts` is checked; returns
-   `ErrorCode::ChallengeExpired`.
-3. If `entry_fee_lamports > 0`, lamports are transferred from `authority` to the
-   `challenge` PDA via a system program CPI.
-4. `challenge.pool_lamports` is incremented with `checked_add`.
-5. `enrollment` is initialised. `reps_logged` is pre-populated with one `ExerciseCount`
-   per entry in `challenge.requirements`, each with `count = 0` and the matching
-   `exercise_id`. This keeps indices aligned for `log_reps` updates.
-6. `enrollment.completed = false`, `enrollment.reward_claimed = false`.
-
-
-### `claim_reward`
-
-**Caller:** A user where `enrollment.completed == true` and `reward_claimed == false`.
-
-**Accounts context:**
-```
-enrollment: Account<Enrollment>  [mut, seeds = [SEED_ENROLLMENT, challenge.key(), authority.key()], has_one = user, has_one = challenge]
-challenge:  Account<Challenge>   [mut]
-authority:  Signer
-```
-
-**Logic:**
-1. `enrollment.completed == true` is checked.
-2. `!enrollment.reward_claimed` is checked; returns `ErrorCode::AlreadyClaimed`.
-3. `user_share` is calculated as
-   `challenge.pool_lamports * (10_000 - PROTOCOL_FEE_BPS) / 10_000 / challenge.completers as u64`.
-4. `user_share` lamports are transferred from the `challenge` PDA to `authority` using a
-   PDA signer (`challenge` signs via its bump).
-5. `enrollment.reward_claimed = true`.
-
-
-## 4. Running and Testing
+## 1. Testing Reference
 
 ### The Test Stack
 
@@ -316,74 +10,337 @@ is configured to run `cargo test` via `anchor test`.
 ### Building
 
 `anchor build` produces `target/deploy/neofit.so` (BPF bytecode) and
-`target/idl/neofit.json` (the IDL). Rebuilds are required after every program change.
+`target/idl/neofit.json` (the IDL). The IDL is the single source of truth for both the
+Codama client generator and the TypeScript frontend. Rebuild after every program change.
 
-### LiteSVM Unit Tests
+### Running Tests
 
-Each test file follows the same skeleton:
-1. A `LiteSVM` instance is created.
-2. The compiled `.so` is loaded via `include_bytes!`.
-3. A keypair is created and airdropped SOL.
-4. The instruction is constructed with Anchor-encoded data and account metas.
-5. A `VersionedTransaction` is built and sent via `svm.send_transaction(tx)`.
+```bash
+cargo test -p neofit
+# or from workspace root:
+cargo test
+```
 
 ### Deploying to a Live Validator
 
-Deployments can be made to a local validator using `solana-test-validator` and
-`anchor deploy`, or to a cloud-hosted validator like Surfpool by updating the cluster URL
-in `Anchor.toml`.
+```bash
+# Terminal 1
+solana-test-validator
+
+# Terminal 2 - deploy after building
+anchor deploy
+```
+
+Alternatively, point `cluster` in `Anchor.toml` at a Surfpool RPC URL for a
+cloud-hosted validator. Revert before committing.
 
 
-## 5. Connecting to the Svelte Frontend
+## 2. Codama Client Generation
 
-1. **IDL:** After `anchor build`, `target/idl/neofit.json` is copied to
-   `app/src/lib/idl/neofit.json`. The Anchor TypeScript client uses this to encode and
-   decode instructions automatically.
-2. **Real Wallet Adapter:** The mocked `wallet.ts` store is replaced with
-   `@svelte-on-solana/wallet-adapter` to provide a real `PublicKey`, signing capability,
-   and an RPC `Connection`.
-3. **PDA Helpers (`app/src/lib/pdas.ts`):** All PDA derivations are centralised here,
-   using the same seed strings as `constants.rs`. This is the one place where the seeds
-   must be kept manually in sync between Rust and TypeScript.
-4. **Exercise ID mapping:** The `workouts` array in `index.ts` imports `exercises.json`
-   and exposes `onChainId: number` on each workout definition. The `log_reps` call reads
-   `workout.onChainId` rather than an array index.
-5. **Instruction Wrappers (`app/src/lib/program.ts`):** One async function per
-   instruction keeps blockchain logic out of Svelte components.
-6. **Replacing Mocks:** The Profile page reads `UserProfile` from the PDA and calls
-   `update_username` instead of writing to localStorage. The Workout page calls `log_reps`
-   on session end. The Challenges page calls `join_challenge` and `claim_reward`.
+### What Codama Is and Why You Need It
+
+Codama is a code-generation pipeline. It reads `target/idl/neofit.json` and emits
+fully-typed TypeScript: one file per instruction, one per account type, PDA derivation
+helpers, and a barrel `index.ts`. The alternative - constructing raw instruction bytes
+with `InstructionData` and manually deriving PDAs, exactly as the Rust tests do - works
+but gives you no type checking, no autocomplete, and breaks silently when the IDL
+changes.
+
+The generated client is what the Svelte components will import. Wire the frontend before
+running Codama and you are building on an untyped, hand-rolled foundation that you will
+have to throw away.
+
+### Where the Code Lives
+
+Everything stays inside the existing repo. Codama packages are `devDependencies` of
+`app/`. The generation script lives at the workspace root. Generated output is committed
+into `app/src/lib/generated/` and re-run after every `anchor build`.
+
+```
+(workspace root)
+├── codama.ts                        <- generation script (new)
+├── target/idl/neofit.json           <- read by the script
+└── app/
+    ├── package.json                 <- add Codama devDependencies here
+    └── src/lib/
+        └── generated/               <- committed generated output (new)
+            ├── index.ts
+            ├── accounts/
+            │   ├── userProfile.ts
+            │   ├── challenge.ts
+            │   └── enrollment.ts
+            ├── instructions/
+            │   ├── initializeUser.ts
+            │   ├── updateUsername.ts
+            │   ├── logReps.ts
+            │   ├── createChallenge.ts
+            │   ├── joinChallenge.ts
+            │   └── claimReward.ts
+            └── types/
+                ├── exerciseCount.ts
+                └── exerciseRequirement.ts
+```
+
+Add `app/src/lib/generated/` to version control. Treat it like a lock-file: machine-
+generated, committed, re-generated when the IDL changes.
+
+### Installing Codama
+
+```bash
+cd app
+npm install --save-dev \
+  codama \
+  @codama/nodes-from-anchor \
+  @codama/renderers-js \
+  @codama/renderers-js-umi \
+  tsx
+```
+
+`codama` is the core node-manipulation library. `@codama/nodes-from-anchor` parses Anchor
+IDLs into Codama's intermediate representation. `@codama/renderers-js` emits plain
+TypeScript (no framework dependency). `tsx` lets you run the generation script directly
+without a separate compile step.
+
+### The Generation Script
+
+Create `codama.ts` at the workspace root (one level above `app/`):
+
+```typescript
+// codama.ts  - run with: npx tsx codama.ts
+import { createFromRoot } from 'codama'
+import { rootNodeFromAnchor } from '@codama/nodes-from-anchor'
+import { renderJavaScriptVisitor } from '@codama/renderers-js'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const idl = JSON.parse(
+  readFileSync(join(__dirname, 'target/idl/neofit.json'), 'utf8')
+)
+
+const codama = createFromRoot(rootNodeFromAnchor(idl))
+
+codama.accept(
+  renderJavaScriptVisitor(
+    join(__dirname, 'app/src/lib/generated'),
+    { prettierOptions: { useTabs: true, singleQuote: true } }
+  )
+)
+```
+
+Add a convenience script to the workspace-root `package.json`:
+
+```json
+{
+  "scripts": {
+    "codama": "tsx codama.ts"
+  }
+}
+```
+
+Run it once manually after every `anchor build`:
+
+```bash
+anchor build
+npm run codama        # from workspace root
+```
+
+The correct order is always **build → generate → frontend**. If you change the Rust
+program and forget to re-run Codama, TypeScript types will be stale and the compiler will
+catch the mismatch.
+
+### What Gets Generated
+
+| File pattern | Contents |
+|---|---|
+| `accounts/userProfile.ts` | `fetchUserProfile(rpc, address)`, `deserializeUserProfile(data)`, size constants |
+| `accounts/challenge.ts` | Same shape for `Challenge` |
+| `accounts/enrollment.ts` | Same shape for `Enrollment` |
+| `instructions/logReps.ts` | `getLogRepsInstruction({ userProfile, authority, exerciseId, count, ... })` |
+| `instructions/joinChallenge.ts` | `getJoinChallengeInstruction(...)` with full account resolution |
+| `types/exerciseRequirement.ts` | Borsh codec for `ExerciseRequirement` |
+| `index.ts` | Re-exports everything; the only import path Svelte components need |
+
+Every instruction builder accepts a plain object matching the Anchor accounts context. The
+compiler will error if a required account is omitted or if `exerciseId` is passed as a
+`string` instead of `number`.
 
 
-## 6. Security Notes (NeoFit-specific)
+## 3. Connecting to the Svelte Frontend
 
-* **The MoveNet trust problem:** `log_reps` accepts a rep count from the frontend that
-  the program cannot independently verify. For production, a trusted oracle signs the
-  count server-side and the instruction verifies the signature against a stored oracle
-  pubkey.
-* **Anchor safeguards:** `overflow-checks = true` is set in `Cargo.toml`. `checked_add`
-  is used explicitly for clarity. `init` (not `init_if_needed`) prevents re-initialisation
-  attacks. `has_one` constraints enforce signer checks. Timestamps are read from
-  `Clock::get()`, never from instruction arguments.
-* **Completion flag integrity:** `enrollment.completed` is set exclusively by `log_reps`
-  on-chain after verifying all requirements. The frontend has no instruction path to set
-  it directly.
+### Overview of Changes
+
+The generated client does not replace all of `wallet.ts` at once. Migration happens
+component by component, in this order: wallet adapter → PDA helpers → instruction
+wrappers → component updates. Each step is independently testable in the browser before
+moving to the next.
+
+### Real Wallet Adapter
+
+The current `wallet.ts` reads a pubkey from `VITE_PUBLIC_WALLET_ADDRESS` and has no
+signing capability. Replace it with `@svelte-on-solana/wallet-adapter-core` so that
+actual keypair signing flows through the same `$wallet` store the components already use.
+
+```bash
+cd app
+npm install \
+  @solana/web3.js \
+  @svelte-on-solana/wallet-adapter-core \
+  @svelte-on-solana/wallet-adapter-ui \
+  @solana/wallet-adapter-wallets
+```
+
+The replacement store keeps the same `{ connected, address }` shape so that wallet-gated
+UI conditionals (`{#if $wallet.connected}`) require no changes. Add two new exports that
+the instruction wrappers will need:
+
+```typescript
+// app/src/lib/wallet.ts  (additions)
+export const connection = new Connection(
+  import.meta.env.VITE_RPC_URL ?? 'http://127.0.0.1:8899',
+  'confirmed'
+)
+
+// Returns an Anchor-compatible provider for the currently connected wallet.
+export function getProvider(): AnchorProvider { ... }
+```
+
+Add `VITE_RPC_URL` to `app/.env.example`.
+
+### PDA Helpers (`app/src/lib/pdas.ts`)
+
+Create this file. It is the one place where seed strings must be kept manually in sync
+with `constants.rs`. If the generated Codama client already emits PDA derivers for your
+account types, import and re-export them from here rather than reimplementing.
+
+```typescript
+// app/src/lib/pdas.ts
+import { PublicKey } from '@solana/web3.js'
+import { PROGRAM_ID } from '$lib/generated'
+
+export async function userProfilePda(authority: PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('user_profile'), authority.toBuffer()],
+    PROGRAM_ID
+  )
+}
+
+export async function challengePda(authority: PublicKey, nonce: bigint) {
+  const nonceBuf = Buffer.alloc(8)
+  nonceBuf.writeBigUInt64LE(nonce)
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('challenge'), authority.toBuffer(), nonceBuf],
+    PROGRAM_ID
+  )
+}
+
+export async function enrollmentPda(challenge: PublicKey, user: PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('enrollment'), challenge.toBuffer(), user.toBuffer()],
+    PROGRAM_ID
+  )
+}
+```
+
+The seed strings `'user_profile'`, `'challenge'`, and `'enrollment'` must match the byte
+literals in `constants.rs` exactly. A mismatch silently derives the wrong address and
+produces an `AccountNotFound` error at runtime.
+
+### Instruction Wrappers (`app/src/lib/program.ts`)
+
+One async function per instruction. These are the only places in the frontend that touch
+`sendAndConfirmTransaction`. Keeping blockchain logic here means Svelte components stay
+clean and the wrappers can be unit-tested independently.
+
+```typescript
+// app/src/lib/program.ts
+import { getInitializeUserInstruction }  from '$lib/generated'
+import { getLogRepsInstruction }         from '$lib/generated'
+import { getJoinChallengeInstruction }   from '$lib/generated'
+import { getClaimRewardInstruction }     from '$lib/generated'
+import { getUpdateUsernameInstruction }  from '$lib/generated'
+import { userProfilePda, enrollmentPda } from '$lib/pdas'
+import { getProvider }                   from '$lib/wallet'
+
+export async function initializeUser() { ... }
+
+export async function updateUsername(newUsername: string) { ... }
+
+// exerciseId matches WorkoutDef.onChainId - already wired in workouts/index.ts
+export async function logReps(
+  exerciseId: number,
+  count: number,
+  challengePda?: PublicKey,
+  enrollmentPda?: PublicKey
+) { ... }
+
+export async function joinChallenge(challengePda: PublicKey) { ... }
+
+export async function claimReward(challengePda: PublicKey) { ... }
+```
+
+Each wrapper: derives necessary PDAs, builds the instruction via the generated helper,
+signs and sends the transaction, and throws a typed error on failure. The Svelte component
+catches that error and shows UI feedback - no raw Solana errors ever reach the template.
+
+### Component Migration
+
+Migrate one component at a time. Each component below lists what it currently uses and
+what replaces it.
+
+**`+layout.svelte`** - The wallet connect/disconnect button already calls `wallet.connect()`
+and `wallet.disconnect()`. Replace the mock implementations in `wallet.ts` with the real
+adapter. No template changes needed.
+
+**`profile/+page.svelte`** - Currently reads from `localStorage` and writes via
+`setUsername`. Replace with two calls: on mount, `fetchUserProfile(rpc, pda)` to read the
+`UserProfile` account (populates `username`, `totalReps`, `streakDays`); on save,
+`updateUsername(draft)` from `program.ts`. Remove the placeholder-data warning banner once
+`userStats` is sourced from the PDA. The `editingName` / `draft` state variables are
+unchanged.
+
+**`workout/+page.svelte`** - Currently resets state and displays reps in-browser only.
+After the user stops the session (or on a new "Save" button), call `logReps(workout.onChainId, count)`.
+If the user is enrolled in a challenge, also pass `challengePda` and `enrollmentPda` from
+the URL or local state. The `onChainId` field is already present on every `WorkoutDef`
+object (wired in `workouts/index.ts`) so no changes are needed to the detection layer.
+
+**`challenges/+page.svelte`** - The "Join Pool" button currently does nothing. Replace
+with a call to `joinChallenge(challengePda)`. Sponsored challenge data is currently
+hard-coded; once `Challenge` PDAs exist on-chain, replace with a paginated account fetch
+using the generated `fetchAllChallenge(rpc)` or a filtered variant. After joining, persist
+`enrollmentPda` in component state so that the workout page can pick it up.
+
+### Exercise ID Mapping
+
+`WorkoutDef.onChainId` (the `u8` sent in `log_reps`) is already sourced from
+`exercises.json` via `workouts/index.ts`. No additional mapping is needed. The workout
+page reads `cur.onChainId` when it calls `logReps`.
+
+### `.env` Variables
+
+| Variable | Purpose | Example |
+|---|---|---|
+| `VITE_RPC_URL` | Solana RPC endpoint used by `wallet.ts` | `http://127.0.0.1:8899` |
+| `VITE_PUBLIC_WALLET_ADDRESS` | Remove once real adapter is wired | - |
+
+Update `app/.env.example` to document `VITE_RPC_URL` and remove
+`VITE_PUBLIC_WALLET_ADDRESS`.
 
 
-## 7. Instructions
+## 4. Recommended Sequence
 
-| Instruction | Signature | Arguments |
-| :--- | :--- | :--- |
-| **`initialize_user`** | `pub fn initialize_user(ctx: Context<InitializeUser>)` | *None (uses PDA seeds)* |
-| **`update_username`** | `pub fn update_username(ctx: Context<UpdateUsername>, new_username: String)` | `new_username: String` |
-| **`log_reps`** | `pub fn log_reps(ctx: Context<LogReps>, exercise_id: u8, count: u32)` | `exercise_id: u8, count: u32` |
-| **`create_challenge`** | `pub fn create_challenge(ctx: Context<CreateChallenge>, title: String, requirements: Vec<ExerciseRequirement>, entry_fee: u64, deadline: i64, nonce: u64)` | `title, requirements, fees, deadline, nonce` |
-| **`join_challenge`** | `pub fn join_challenge(ctx: Context<JoinChallenge>)` | *None (uses PDA seeds)* |
-| **`claim_reward`** | `pub fn claim_reward(ctx: Context<ClaimReward>)` | *None (uses PDA seeds)* |
+| Step | Command / Action |
+|---|---|
+| 1. Build program | `anchor build` |
+| 2. Generate client | `npm run codama` (workspace root) |
+| 3. Install wallet adapter | `cd app && npm install @svelte-on-solana/wallet-adapter-core ...` |
+| 4. Create `pdas.ts` | Manual - keep seeds in sync with `constants.rs` |
+| 5. Create `program.ts` | Manual - one wrapper per instruction |
+| 6. Migrate `wallet.ts` | Replace mock `connect()` with real adapter |
+| 7. Migrate Profile page | `fetchUserProfile` + `updateUsername` |
+| 8. Migrate Workout page | `logReps` on session end |
+| 9. Migrate Challenges page | `joinChallenge`, live account fetch |
+| 10. Deploy to Surfpool | Update `Anchor.toml` cluster URL, `anchor deploy` |
 
-**`withdraw_fees` (post-MVP)** - Allows the protocol to collect its share.
-
-**Token rewards (post-MVP)** - Replaces SOL payouts with an SPL token mint.
-
-### The `log_reps` Context
-When I get to `log_reps`, remember `Option<Account<Enrollment>>`. This is because a user might be logging reps for their general profile *without* being in a challenge. Context struct will need to handle those accounts as optional.
+Steps 1–2 must be repeated together after any change to the Rust program. Steps 3–9 are
+independent of each other once the generated client and `program.ts` exist.
