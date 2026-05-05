@@ -37,7 +37,7 @@ pub fn handler(
     require!(requirements.len() >= 1 && requirements.len() <= MAX_REQUIREMENTS, ErrorCode::TooManyRequirements);
 
     for req in requirements.iter() {
-        require!(req.exercise_id <= MAX_EXERCISE_ID, ErrorCode::InvalidExerciseId);
+        require!(req.exercise_id < MAX_EXERCISE_ID, ErrorCode::InvalidExerciseId);
         require!(req.rep_target > 0, ErrorCode::InvalidExerciseId); 
     }
 

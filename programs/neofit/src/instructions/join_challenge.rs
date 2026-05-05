@@ -39,13 +39,17 @@ pub fn handler(ctx: Context<JoinChallenge>) -> Result<()> {
     require!(challenge.is_active, ErrorCode::ChallengeInactive);
     require!(Clock::get()?.unix_timestamp < challenge.deadline_ts, ErrorCode::ChallengeExpired);
 
+    // join_challenge.rs – replace the if-block with:
     if challenge.entry_fee_lamports > 0 {
-        let authority_lamports = ctx.accounts.authority.to_account_info().lamports();
-        let new_authority_lamports = authority_lamports.checked_sub(challenge.entry_fee_lamports).ok_or(ErrorCode::InsufficientFunds)?;
+        let cpi_ctx = CpiContext::new(
+            ctx.accounts.system_program.key(),
+            anchor_lang::system_program::Transfer {
+                from: ctx.accounts.authority.to_account_info(),
+                to:   challenge.to_account_info(),
+            },
+        );
 
-        **ctx.accounts.authority.to_account_info().try_borrow_mut_lamports()? = new_authority_lamports;
-        **challenge.to_account_info().try_borrow_mut_lamports()? = challenge.to_account_info().lamports().checked_add(challenge.entry_fee_lamports).ok_or(ErrorCode::Overflow)?;
-
+        anchor_lang::system_program::transfer(cpi_ctx, challenge.entry_fee_lamports)?;
         challenge.pool_lamports = challenge.pool_lamports.checked_add(challenge.entry_fee_lamports).ok_or(ErrorCode::Overflow)?;
     }
 

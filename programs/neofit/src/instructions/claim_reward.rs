@@ -20,6 +20,8 @@ pub struct ClaimReward<'info> {
 
     #[account(mut)]
     pub authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 
@@ -32,11 +34,26 @@ pub fn handler(ctx: Context<ClaimReward>) -> Result<()> {
 
     if challenge.completers > 0 && challenge.pool_lamports > 0 {
         let fee_multiplier = 10_000u64.checked_sub(PROTOCOL_FEE_BPS).ok_or(ErrorCode::Overflow)?;
-        let net_pool = challenge.pool_lamports.checked_mul(fee_multiplier).ok_or(ErrorCode::Overflow)? / 10_000u64;
+        let net_pool = challenge.pool_lamports.checked_mul(fee_multiplier).ok_or(ErrorCode::Overflow)? / 10_000;
         let user_share = net_pool.checked_div(challenge.completers as u64).ok_or(ErrorCode::Overflow)?;
 
-        **challenge.to_account_info().try_borrow_mut_lamports()? = challenge.to_account_info().lamports().checked_sub(user_share).ok_or(ErrorCode::Overflow)?;
-        **ctx.accounts.authority.to_account_info().try_borrow_mut_lamports()? = ctx.accounts.authority.to_account_info().lamports().checked_add(user_share).ok_or(ErrorCode::Overflow)?;
+        let seeds = &[
+            SEED_CHALLENGE,
+            challenge.authority.as_ref(),
+            &challenge.nonce.to_le_bytes(),
+            &[challenge.bump],
+        ];
+        let signer = &[&seeds[..]];
+        
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.system_program.key(), 
+            anchor_lang::system_program::Transfer {
+                from: challenge.to_account_info(),
+                to:   ctx.accounts.authority.to_account_info(),
+            },
+            signer,
+        );
+        anchor_lang::system_program::transfer(cpi_ctx, user_share)?;
     }
 
     enrollment.reward_claimed = true;

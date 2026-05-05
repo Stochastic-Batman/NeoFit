@@ -150,6 +150,7 @@ fn claim_reward_ix(enrollment: Pubkey, challenge: Pubkey, authority: Pubkey) -> 
             enrollment,
             challenge,
             authority,
+            system_program: anchor_lang::solana_program::system_program::ID,
         }
         .to_account_metas(None),
     )

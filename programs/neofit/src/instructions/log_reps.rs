@@ -26,7 +26,7 @@ pub struct LogReps<'info> {
 
 
 pub fn handler(ctx: Context<LogReps>, exercise_id: u8, count: u32) -> Result<()> {
-    require!(exercise_id <= MAX_EXERCISE_ID, ErrorCode::InvalidExerciseId);
+    require!(exercise_id < MAX_EXERCISE_ID, ErrorCode::InvalidExerciseId);
 
     let user_profile = &mut ctx.accounts.user_profile;
     let mut profile_exercise_exists = false;

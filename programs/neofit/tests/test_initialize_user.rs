@@ -79,7 +79,7 @@ fn test_initialize_user_default_username_format() {
     let profile = UserProfile::try_deserialize(&mut raw.data.as_ref()).unwrap();
 
     let addr = payer.pubkey().to_string();
-    let expected = format!("user_{}{}", &addr[..4], &addr[addr.len() - 4..]);
+    let expected = format!("{}default_as_irl{}", &addr[..4], &addr[addr.len() - 4..]);
 
     assert_eq!(profile.username, expected);
     assert!(profile.username.len() <= 22);
