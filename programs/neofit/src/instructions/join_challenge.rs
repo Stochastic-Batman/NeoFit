@@ -39,7 +39,6 @@ pub fn handler(ctx: Context<JoinChallenge>) -> Result<()> {
     require!(challenge.is_active, ErrorCode::ChallengeInactive);
     require!(Clock::get()?.unix_timestamp < challenge.deadline_ts, ErrorCode::ChallengeExpired);
 
-    // join_challenge.rs – replace the if-block with:
     if challenge.entry_fee_lamports > 0 {
         let cpi_ctx = CpiContext::new(
             ctx.accounts.system_program.key(),

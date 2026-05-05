@@ -43,17 +43,11 @@ pub fn handler(ctx: Context<ClaimReward>) -> Result<()> {
             &challenge.nonce.to_le_bytes(),
             &[challenge.bump],
         ];
+        #[allow(unused_variables)]
         let signer = &[&seeds[..]];
         
-        let cpi_ctx = CpiContext::new_with_signer(
-            ctx.accounts.system_program.key(), 
-            anchor_lang::system_program::Transfer {
-                from: challenge.to_account_info(),
-                to:   ctx.accounts.authority.to_account_info(),
-            },
-            signer,
-        );
-        anchor_lang::system_program::transfer(cpi_ctx, user_share)?;
+        challenge.sub_lamports(user_share)?;
+        ctx.accounts.authority.add_lamports(user_share)?;
     }
 
     enrollment.reward_claimed = true;

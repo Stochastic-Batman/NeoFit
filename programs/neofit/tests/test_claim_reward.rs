@@ -9,8 +9,10 @@ use {
     solana_message::{Message, VersionedMessage},
     solana_signer::Signer,
     solana_transaction::versioned::VersionedTransaction,
+    std::sync::atomic::{AtomicU64, Ordering},
 };
 
+static TX_COUNTER: AtomicU64 = AtomicU64::new(1);
 const FUTURE_DEADLINE: i64 = 9_999_999_999;
 
 fn setup() -> (LiteSVM, Keypair) {
@@ -30,9 +32,24 @@ fn new_funded_user(svm: &mut LiteSVM) -> Keypair {
 
 fn send(svm: &mut LiteSVM, ix: Instruction, signer: &Keypair) -> bool {
     let blockhash = svm.latest_blockhash();
-    let msg = Message::new_with_blockhash(&[ix], Some(&signer.pubkey()), &blockhash);
+    
+    let counter = TX_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let dummy_ix = anchor_lang::solana_program::system_instruction::transfer(
+        &signer.pubkey(), 
+        &signer.pubkey(), 
+        counter
+    );
+
+    let msg = Message::new_with_blockhash(&[ix, dummy_ix], Some(&signer.pubkey()), &blockhash);
     let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &[signer]).unwrap();
-    svm.send_transaction(tx).is_ok()
+    
+    match svm.send_transaction(tx) {
+        Ok(_) => true,
+        Err(e) => {
+            println!("Transaction Failed: {:?}", e);
+            false
+        }
+    }
 }
 
 fn derive_user_profile(authority: &Pubkey) -> Pubkey {
