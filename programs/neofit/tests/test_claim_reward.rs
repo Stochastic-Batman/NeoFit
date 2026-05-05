@@ -9,10 +9,8 @@ use {
     solana_message::{Message, VersionedMessage},
     solana_signer::Signer,
     solana_transaction::versioned::VersionedTransaction,
-    std::sync::atomic::{AtomicU64, Ordering},
 };
 
-static TX_COUNTER: AtomicU64 = AtomicU64::new(1);
 const FUTURE_DEADLINE: i64 = 9_999_999_999;
 
 fn setup() -> (LiteSVM, Keypair) {
@@ -32,23 +30,11 @@ fn new_funded_user(svm: &mut LiteSVM) -> Keypair {
 
 fn send(svm: &mut LiteSVM, ix: Instruction, signer: &Keypair) -> bool {
     let blockhash = svm.latest_blockhash();
-    
-    let counter = TX_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let dummy_ix = anchor_lang::solana_program::system_instruction::transfer(
-        &signer.pubkey(), 
-        &signer.pubkey(), 
-        counter
-    );
-
-    let msg = Message::new_with_blockhash(&[ix, dummy_ix], Some(&signer.pubkey()), &blockhash);
+    let msg = Message::new_with_blockhash(&[ix], Some(&signer.pubkey()), &blockhash);
     let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &[signer]).unwrap();
-    
     match svm.send_transaction(tx) {
         Ok(_) => true,
-        Err(e) => {
-            println!("Transaction Failed: {:?}", e);
-            false
-        }
+        Err(e) => { println!("Transaction Failed: {:?}", e); false }
     }
 }
 
@@ -246,7 +232,6 @@ fn test_claim_reward_incomplete_enrollment_fails() {
     initialize_user(&mut svm, &user);
     let enrollment = join_challenge(&mut svm, &user, challenge_pda);
 
-    // Log fewer reps than required — enrollment.completed stays false
     log_reps_with_enrollment(&mut svm, &user, challenge_pda, enrollment, 0, 10);
 
     let e = get_enrollment(&svm, &enrollment);
@@ -264,12 +249,13 @@ fn test_claim_reward_payout_single_completer() {
     let (mut svm, creator) = setup();
     initialize_user(&mut svm, &creator);
 
+    let user = new_funded_user(&mut svm);
+    initialize_user(&mut svm, &user);
+    
     let entry_fee = 1_000_000_000u64;
     let reqs = vec![ExerciseRequirement { exercise_id: 0, rep_target: 5 }];
     let challenge_pda = create_challenge(&mut svm, &creator, 0, reqs.clone(), entry_fee);
 
-    let user = new_funded_user(&mut svm);
-    initialize_user(&mut svm, &user);
     let enrollment = setup_completed_enrollment(&mut svm, &user, challenge_pda, &reqs);
 
     let user_lamports_before = lamports(&svm, &user.pubkey());
@@ -302,31 +288,23 @@ fn test_claim_reward_payout_splits_among_completers() {
 
     let entry_fee = 1_000_000_000u64;
     let reqs = vec![ExerciseRequirement { exercise_id: 0, rep_target: 5 }];
+
+    let users: Vec<Keypair> = (0..3).map(|_| {
+        let u = new_funded_user(&mut svm);
+        initialize_user(&mut svm, &u);
+        u
+    }).collect();
+
     let challenge_pda = create_challenge(&mut svm, &creator, 0, reqs.clone(), entry_fee);
-
-    let mut users = Vec::new();
-    let mut enrollments = Vec::new();
-    for _ in 0..3 {
-        let user = new_funded_user(&mut svm);
-        initialize_user(&mut svm, &user);
-        let enrollment = setup_completed_enrollment(&mut svm, &user, challenge_pda, &reqs);
-        users.push(user);
-        enrollments.push(enrollment);
-    }
-
-    // pool = 3 SOL; net = 2.7 SOL; each of 3 completers gets 0.9 SOL
     let expected_per_user = entry_fee * 3 * 9_000 / 10_000 / 3;
 
-    for (user, enrollment) in users.iter().zip(enrollments.iter()) {
+    for user in &users {
+        let enrollment = setup_completed_enrollment(&mut svm, user, challenge_pda, &reqs);
         let before = lamports(&svm, &user.pubkey());
-        let ix = claim_reward_ix(*enrollment, challenge_pda, user.pubkey());
+        let ix = claim_reward_ix(enrollment, challenge_pda, user.pubkey());
         assert!(send(&mut svm, ix, user));
         let after = lamports(&svm, &user.pubkey());
-        assert_eq!(
-            after,
-            before + expected_per_user,
-            "each completer must receive an equal share"
-        );
+        assert_eq!(after, before + expected_per_user, "each completer must receive an equal share");
     }
 }
 
@@ -364,7 +342,6 @@ fn test_claim_reward_multi_requirement_challenge() {
     initialize_user(&mut svm, &user);
     let enrollment = join_challenge(&mut svm, &user, challenge_pda);
 
-    // Log all but the last requirement
     log_reps_with_enrollment(&mut svm, &user, challenge_pda, enrollment, 0, 10);
     log_reps_with_enrollment(&mut svm, &user, challenge_pda, enrollment, 1, 20);
 
@@ -374,7 +351,8 @@ fn test_claim_reward_multi_requirement_challenge() {
     let ix = claim_reward_ix(enrollment, challenge_pda, user.pubkey());
     assert!(!send(&mut svm, ix, &user), "partial completion must not allow claiming");
 
-    // Satisfy the final requirement
+    svm.expire_blockhash();
+
     log_reps_with_enrollment(&mut svm, &user, challenge_pda, enrollment, 4, 15);
 
     let e = get_enrollment(&svm, &enrollment);

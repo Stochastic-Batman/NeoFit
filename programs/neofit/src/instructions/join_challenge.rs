@@ -40,15 +40,17 @@ pub fn handler(ctx: Context<JoinChallenge>) -> Result<()> {
     require!(Clock::get()?.unix_timestamp < challenge.deadline_ts, ErrorCode::ChallengeExpired);
 
     if challenge.entry_fee_lamports > 0 {
-        let cpi_ctx = CpiContext::new(
-            ctx.accounts.system_program.key(),
-            anchor_lang::system_program::Transfer {
-                from: ctx.accounts.authority.to_account_info(),
-                to:   challenge.to_account_info(),
-            },
-        );
-
-        anchor_lang::system_program::transfer(cpi_ctx, challenge.entry_fee_lamports)?;
+        anchor_lang::solana_program::program::invoke(
+            &anchor_lang::solana_program::system_instruction::transfer(
+                ctx.accounts.authority.key,
+                &challenge.key(),
+                challenge.entry_fee_lamports,
+            ),
+            &[
+                ctx.accounts.authority.to_account_info(),
+                challenge.to_account_info(),
+            ],
+        )?;
         challenge.pool_lamports = challenge.pool_lamports.checked_add(challenge.entry_fee_lamports).ok_or(ErrorCode::Overflow)?;
     }
 
