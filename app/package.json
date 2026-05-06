@@ -45,6 +45,7 @@
 	},
 	"dependencies": {
 		"@anchor-lang/core": "^1.0.1",
+		"@solana/wallet-adapter-wallets": "^0.19.38",
 		"@solana/web3.js": "^1.98.4",
 		"@svelte-on-solana/wallet-adapter-core": "^1.0.11-alpha.0",
 		"@svelte-on-solana/wallet-adapter-ui": "^1.0.21-alpha.0",
