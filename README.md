@@ -81,6 +81,12 @@ anchor deploy
 
 Alternatively, use [Surfpool](https://surfpool.dev) as a cloud-hosted validator. Change `cluster` in `Anchor.toml` to your Surfpool RPC URL while testing, then revert before committing.
 
+### 5. Codama Install
+
+```bash
+npm install --save-dev codama @codama/nodes-from-anchor @codama/renderers-js @codama/renderers-js-umi tsx
+```
+
 
 ## Supported Exercises
 
