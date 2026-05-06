@@ -1,48 +1,76 @@
-import { writable, derived } from 'svelte/store'
+import { AnchorProvider } from '@coral-xyz/anchor'
+import { Connection, type PublicKey } from '@solana/web3.js'
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets'
+import { derived, writable } from 'svelte/store'
 
-const ENV_ADDR = import.meta.env.VITE_PUBLIC_WALLET_ADDRESS as string | undefined
 
 type WalletState = {
 	connected: boolean
 	address: string | null
+	publicKey: PublicKey | null
 }
 
-function createWallet() {
-	const { subscribe, set, update } = writable<WalletState>({ connected: false, address: null })
+const adapter = new PhantomWalletAdapter()
+const state = writable<WalletState>({ connected: false, address: null, publicKey: null })
 
+function syncFromAdapter() {
+	const publicKey = adapter.publicKey ?? null
+	state.set({
+		connected: Boolean(adapter.connected && publicKey),
+		address: publicKey?.toBase58() ?? null,
+		publicKey
+	})
+}
+
+adapter.on('connect', syncFromAdapter)
+adapter.on('disconnect', syncFromAdapter)
+
+export const connection = new Connection(import.meta.env.VITE_RPC_URL ?? 'http://127.0.0.1:8899', 'confirmed')
+
+function createWallet() {
 	return {
-		subscribe,
-		connect() {
-			const address = ENV_ADDR ?? 'ENV_ADDR_NOT_SPECIFIED'
-			set({ connected: true, address })
+		subscribe: state.subscribe,
+		async connect() {
+			await adapter.connect()
+			syncFromAdapter()
 		},
-		disconnect() {
-			update((s) => ({ ...s, connected: false }))
+		async disconnect() {
+			await adapter.disconnect()
+			syncFromAdapter()
 		}
 	}
 }
 
 export const wallet = createWallet()
 
-// Stored as localStorage["neofit:username:<address>"] so each wallet address
-// has its own independent username. When the backend lands this moves to a PDA.
-
-function usernameKey(address: string) {
-	return `neofit:username:${address}`
-}
-
-export function getUsername(address: string): string {
-	return localStorage.getItem(usernameKey(address)) ?? 'default_as_irl'
-}
-
-export function setUsername(address: string, name: string) {
-	if (name.trim()) localStorage.setItem(usernameKey(address), name.trim())
-	else localStorage.removeItem(usernameKey(address))
-}
-
-// Derived readable: display string for the nav button
-export const displayAddress = derived(wallet, ($w) => {
+export const displayAddress = derived(state, ($w) => {
 	if (!$w.connected || !$w.address) return 'Connect Wallet'
 	const a = $w.address
-	return `${a.slice(0, 4)}…${a.slice(-4)}`
+	return ${a.slice(0, 4)}...${a.slice(-4)}
 })
+
+export function getProvider(): AnchorProvider {
+	if (!adapter.publicKey) {
+		throw new Error('Wallet not connected')
+	}
+	if (!adapter.signTransaction || !adapter.signAllTransactions) {
+		throw new Error('Connected wallet does not support transaction signing')
+	}
+
+	const walletForAnchor = {
+		publicKey: adapter.publicKey,
+		signTransaction: adapter.signTransaction.bind(adapter),
+		signAllTransactions: adapter.signAllTransactions.bind(adapter)
+	}
+
+	return new AnchorProvider(connection, walletForAnchor as never, AnchorProvider.defaultOptions())
+}
+
+// Temporary compatibility shims until profile page is fully migrated to on-chain data.
+export function getUsername(_address: string): string {
+	return ''
+}
+
+export function setUsername(_address: string, _name: string) {
+	return
+}
