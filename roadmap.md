@@ -1,177 +1,524 @@
-# NeoFit - Client Generation & Frontend Integration Roadmap
+# NeoFit - Frontend ↔ Backend Integration Roadmap
 
-## 1. Connecting to the Svelte Frontend
+## Completed
 
-### Overview of Changes
+- Anchor program built (anchor build)
+- Codama client generated (npm run codama) - lives at app/src/lib/generated/
+- Wallet adapter packages installed in app/:
+  @solana/web3.js, @svelte-on-solana/wallet-adapter-core,
+  @svelte-on-solana/wallet-adapter-ui, @solana/wallet-adapter-wallets
 
-The generated client does not replace all of `wallet.ts` at once. Migration happens
-component by component, in this order: wallet adapter -> PDA helpers -> instruction
-wrappers -> component updates. Each step is independently testable in the browser before
-moving to the next.
+---
 
-### Real Wallet Adapter
+## Critical Compatibility Note
 
-The current `wallet.ts` reads a pubkey from `VITE_PUBLIC_WALLET_ADDRESS` and has no
-signing capability. Replace it with `@svelte-on-solana/wallet-adapter-core` so that
-actual keypair signing flows through the same `$wallet` store the components already use.
+The Codama-generated client imports from @solana/kit (the Solana web3.js *v2* ecosystem).
+The installed @svelte-on-solana/wallet-adapter-* packages and @solana/web3.js are the
+*v1* ecosystem. These two worlds use completely different types - v1 has PublicKey,
+Connection, Transaction classes; v2/Kit has Address strings, Rpc objects, and
+TransactionSigner interfaces.
 
-```bash
-cd app
-npm install @solana/web3.js @svelte-on-solana/wallet-adapter-core @svelte-on-solana/wallet-adapter-ui @solana/wallet-adapter-wallets
-```
+*Recommended approach:* Use @coral-xyz/anchor (the standard Anchor TypeScript SDK,
+built on web3.js v1) for all transaction building and sending. The wallet adapter packages
+already work natively with v1. The Codama-generated client stays in the repo as type
+reference and documentation but is not used directly for instruction calls.
 
-The replacement store keeps the same `{ connected, address }` shape so that wallet-gated
-UI conditionals (`{#if $wallet.connected}`) require no changes. Add two new exports that
-the instruction wrappers will need:
+The generated code still needs its @solana/kit peer dependency resolved so the TypeScript
+compiler does not error on those files. Install it, but do not import it in hand-written code.
 
-```typescript
-// app/src/lib/wallet.ts  (additions)
-export const connection = new Connection(
-  import.meta.env.VITE_RPC_URL ?? 'http://127.0.0.1:8899',
-  'confirmed'
-)
+---
 
-// Returns an Anchor-compatible provider for the currently connected wallet.
-export function getProvider(): AnchorProvider { ... }
-```
+## How Wallets Work / Phantom Integration
 
-Add `VITE_RPC_URL` to `app/.env.example`.
+Phantom is a free browser-extension wallet (available at phantom.app for Chrome, Firefox,
+Brave, Edge). Other free alternatives that work identically: Solflare, Backpack.
 
-### PDA Helpers (`app/src/lib/pdas.ts`)
+When Phantom is installed it injects a window.solana object into every page. The
+@solana/wallet-adapter-wallets package provides adapter classes (PhantomWalletAdapter,
+SolflareWalletAdapter, etc.) that wrap these injected objects. The
+@svelte-on-solana/wallet-adapter-core package gives you a Svelte store (walletStore)
+that manages the connection lifecycle: detect installed wallets -> user picks one -> popup
+asks for approval -> store exposes the connected public key and a signing function.
 
-Create this file. It is the one place where seed strings must be kept manually in sync
-with `constants.rs`. If the generated Codama client already emits PDA derivers for your
-account types, import and re-export them from here rather than reimplementing.
+You do *not* write Phantom-specific code. You pass a list of adapter classes (e.g.
+[new PhantomWalletAdapter(), new SolflareWalletAdapter()]) to the wallet store
+initializer. The library auto-detects which extensions the user has installed and shows
+only those.
 
-```typescript
-// app/src/lib/pdas.ts
-import { PublicKey } from '@solana/web3.js'
-import { PROGRAM_ID } from '$lib/generated'
+For *local development* you must:
+1. Switch Phantom to localhost: Settings -> Developer Settings -> Change Network -> select
+   "Localhost" (or add Custom RPC http://127.0.0.1:8899).
+2. Airdrop SOL to your Phantom address so you can pay transaction fees:
+   solana airdrop 5 <YOUR_PHANTOM_ADDRESS> --url localhost
 
-export async function userProfilePda(authority: PublicKey) {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from('user_profile'), authority.toBuffer()],
-    PROGRAM_ID
-  )
-}
+---
 
-export async function challengePda(authority: PublicKey, nonce: bigint) {
-  const nonceBuf = Buffer.alloc(8)
-  nonceBuf.writeBigUInt64LE(nonce)
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from('challenge'), authority.toBuffer(), nonceBuf],
-    PROGRAM_ID
-  )
-}
+## Implementation Steps
 
-export async function enrollmentPda(challenge: PublicKey, user: PublicKey) {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from('enrollment'), challenge.toBuffer(), user.toBuffer()],
-    PROGRAM_ID
-  )
-}
-```
+### Step 1 - Install remaining packages
 
-The seed strings `'user_profile'`, `'challenge'`, and `'enrollment'` must match the byte
-literals in `constants.rs` exactly. A mismatch silently derives the wrong address and
-produces an `AccountNotFound` error at runtime.
+*Where:* app/ directory
 
-### Instruction Wrappers (`app/src/lib/program.ts`)
+*What to install:*
+- @coral-xyz/anchor - the Anchor TypeScript SDK; provides Program, AnchorProvider,
+  IDL parsing, and program.methods.xxx().accounts({…}).rpc() call pattern.
+- @solana/kit - peer dependency required by the generated client so TypeScript can
+  resolve its imports. You will not import this in your own code.
 
-One async function per instruction. These are the only places in the frontend that touch
-`sendAndConfirmTransaction`. Keeping blockchain logic here means Svelte components stay
-clean and the wrappers can be unit-tested independently.
+*What to remove (optional cleanup):*
+- @anchor-lang/core from dependencies in app/package.json - this is the Rust-side
+  crate re-exported for JS and is not needed; @coral-xyz/anchor replaces it.
 
-```typescript
-// app/src/lib/program.ts
-import { getInitializeUserInstruction }  from '$lib/generated'
-import { getLogRepsInstruction }         from '$lib/generated'
-import { getJoinChallengeInstruction }   from '$lib/generated'
-import { getClaimRewardInstruction }     from '$lib/generated'
-import { getUpdateUsernameInstruction }  from '$lib/generated'
-import { userProfilePda, enrollmentPda } from '$lib/pdas'
-import { getProvider }                   from '$lib/wallet'
+*How to test:* Run npm run check from app/. There should be zero errors about
+missing modules. (There may be type errors in your own files - those are addressed in
+later steps.)
 
-export async function initializeUser() { ... }
+---
 
-export async function updateUsername(newUsername: string) { ... }
+### Step 2 - Environment variables
 
-// exerciseId matches WorkoutDef.onChainId - already wired in workouts/index.ts
-export async function logReps(
-  exerciseId: number,
-  count: number,
-  challengePda?: PublicKey,
-  enrollmentPda?: PublicKey
-) { ... }
+*File to create:* app/.env  
+*File to create:* app/.env.example
 
-export async function joinChallenge(challengePda: PublicKey) { ... }
+*Variables to define:*
+- VITE_RPC_URL - the Solana RPC endpoint. Set to http://127.0.0.1:8899 for local dev.
+- VITE_PROGRAM_ID - the program address from Anchor.toml
+  (BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5). Having it in an env var avoids
+  hardcoding in multiple places.
 
-export async function claimReward(challengePda: PublicKey) { ... }
-```
+*Variable to remove:* VITE_PUBLIC_WALLET_ADDRESS - obsolete once the real wallet
+adapter is wired.
 
-Each wrapper: derives necessary PDAs, builds the instruction via the generated helper,
-signs and sends the transaction, and throws a typed error on failure. The Svelte component
-catches that error and shows UI feedback - no raw Solana errors ever reach the template.
+*How to test:* npm run dev starts without env-related warnings.
 
-### Component Migration
+---
 
-Migrate one component at a time. Each component below lists what it currently uses and
-what replaces it.
+### Step 3 - Copy the IDL into the frontend
 
-**`+layout.svelte`** - The wallet connect/disconnect button already calls `wallet.connect()`
-and `wallet.disconnect()`. Replace the mock implementations in `wallet.ts` with the real
-adapter. No template changes needed.
+*Source:* target/idl/neofit.json (generated by anchor build)  
+*Destination:* app/src/lib/idl/neofit.json
 
-**`profile/+page.svelte`** - Currently reads from `localStorage` and writes via
-`setUsername`. Replace with two calls: on mount, `fetchUserProfile(rpc, pda)` to read the
-`UserProfile` account (populates `username`, `totalReps`, `streakDays`); on save,
-`updateUsername(draft)` from `program.ts`. Remove the placeholder-data warning banner once
-`userStats` is sourced from the PDA. The `editingName` / `draft` state variables are
-unchanged.
+The Anchor TS SDK needs the IDL JSON to construct a Program object at runtime. It
+describes every instruction, account, and type in the on-chain program.
 
-**`workout/+page.svelte`** - Currently resets state and displays reps in-browser only.
-After the user stops the session (or on a new "Save" button), call `logReps(workout.onChainId, count)`.
-If the user is enrolled in a challenge, also pass `challengePda` and `enrollmentPda` from
-the URL or local state. The `onChainId` field is already present on every `WorkoutDef`
-object (wired in `workouts/index.ts`) so no changes are needed to the detection layer.
+Optionally add a Vite alias $idl pointing to app/src/lib/idl in vite.config.ts for
+clean imports. Alternatively, just use a relative path.
 
-**`challenges/+page.svelte`** - The "Join Pool" button currently does nothing. Replace
-with a call to `joinChallenge(challengePda)`. Sponsored challenge data is currently
-hard-coded; once `Challenge` PDAs exist on-chain, replace with a paginated account fetch
-using the generated `fetchAllChallenge(rpc)` or a filtered variant. After joining, persist
-`enrollmentPda` in component state so that the workout page can pick it up.
+*Important:* Every time you change the Rust program and run anchor build, you must
+re-copy this file. Consider adding a package.json script:
+"copy-idl": "cp ../target/idl/neofit.json src/lib/idl/neofit.json"
 
-### Exercise ID Mapping
+*How to test:* npm run check - no "cannot find module" errors on the IDL import.
 
-`WorkoutDef.onChainId` (the `u8` sent in `log_reps`) is already sourced from
-`exercises.json` via `workouts/index.ts`. No additional mapping is needed. The workout
-page reads `cur.onChainId` when it calls `logReps`.
+---
 
-### `.env` Variables
+### Step 4 - Rewrite app/src/lib/wallet.ts
 
-| Variable | Purpose | Example |
+*File to modify:* app/src/lib/wallet.ts
+
+This is the most important step. The current file is a mock - it reads a pubkey from an
+env var, has fake connect()`/disconnect()` methods, and stores usernames in
+localStorage. All of that gets replaced with real wallet adapter integration.
+
+*What the new file must do:*
+
+1. Import walletStore from @svelte-on-solana/wallet-adapter-core.
+2. Import wallet adapter classes from @solana/wallet-adapter-wallets - at minimum
+   PhantomWalletAdapter. Optionally add SolflareWalletAdapter,
+   BackpackWalletAdapter for broader wallet support.
+3. Import Connection from @solana/web3.js and AnchorProvider from
+   @coral-xyz/anchor.
+4. Initialize walletStore with the array of adapter instances.
+5. Create and export a Connection object using VITE_RPC_URL.
+6. Export the wallet store (or a derived store) that exposes at minimum connected (bool)
+   and publicKey (a PublicKey | null). The existing templates check
+   $wallet.connected and $wallet.address - decide whether to keep the same shape
+   (derive address as publicKey?.toBase58()) or update templates in Step 5.
+7. Export a displayAddress derived store - same truncation logic as current.
+8. Export a getProvider() function that builds and returns an AnchorProvider from the
+   Connection and the currently connected wallet adapter. This will be called by
+   program.ts. It should throw a clear error if the wallet is not connected.
+9. Remove getUsername(), setUsername(), and all localStorage username logic - these
+   move on-chain in Step 8.
+
+*How to test:* Run npm run dev, open the app in a browser where Phantom is installed.
+Click the connect button - Phantom's approval popup should appear. After approving, the
+nav should display the truncated address (e.g. 7xK2…9fRq). Click disconnect - address
+clears. Check the JS console for errors.
+
+---
+
+### Step 5 - Update app/src/routes/+layout.svelte
+
+*File to modify:* app/src/routes/+layout.svelte
+
+*What to change:*
+
+- Update imports to match the new wallet.ts exports. If the store shape changed (e.g.
+  $wallet.publicKey instead of $wallet.address), update template references.
+- The connect/disconnect button's onclick handler must call the wallet store's real
+  connect() / disconnect() (or select() + connect()). The exact API depends on
+  @svelte-on-solana/wallet-adapter-core's store interface - check its README.
+- *Alternative approach:* The @svelte-on-solana/wallet-adapter-ui package ships a
+  WalletMultiButton Svelte component that renders a fully styled connect/disconnect
+  button with a wallet-selection dropdown. You can swap your custom button for this
+  component, or keep your custom button and just call the store methods. If you use
+  WalletMultiButton, you likely need to wrap the app in ConnectionProvider and
+  WalletProvider context components (also from wallet-adapter-ui) inside this layout
+  file.
+- The $wallet.connected conditionals that gate nav links (Challenges, Profile) should
+  still work if the store shape is preserved.
+
+*How to test:* Same as Step 4 - connect/disconnect flow works, nav links appear/disappear
+correctly. No console errors.
+
+---
+
+### Step 6 - Create app/src/lib/pdas.ts
+
+*File to create:* app/src/lib/pdas.ts
+
+*Purpose:* One place to derive every PDA the frontend needs. Seeds must match
+programs/neofit/src/constants.rs exactly.
+
+*Functions to export:*
+
+- userProfilePda(authority: PublicKey) -> [PublicKey, bump]
+  Seeds: the UTF-8 bytes of "user_profile" + the authority's 32-byte buffer.
+
+- challengePda(authority: PublicKey, nonce: bigint | number) -> [PublicKey, bump]
+  Seeds: "challenge" + authority buffer + nonce as 8-byte little-endian unsigned integer.
+
+- enrollmentPda(challenge: PublicKey, user: PublicKey) -> [PublicKey, bump]
+  Seeds: "enrollment" + challenge buffer + user buffer.
+
+All three use PublicKey.findProgramAddressSync from @solana/web3.js and the program ID
+from the env var (or hardcoded constant).
+
+*Why not use the Codama-generated PDA helpers?* Those return @solana/kit
+Address
+types, not @solana/web3.js
+PublicKey. Since the rest of the stack (wallet adapter,
+Anchor SDK) uses v1 types, re-deriving here avoids type conversion headaches.
+
+*How to test:* Temporarily add a console.log in the browser that derives a PDA for
+your connected wallet address. Compare the output to what you get from
+anchor keys list or from a Rust test that prints the same PDA. The addresses must match.
+
+---
+
+### Step 7 - Create app/src/lib/program.ts
+
+*File to create:* app/src/lib/program.ts
+
+*Purpose:* One async function per on-chain instruction, plus account-fetching helpers.
+This is the only file in the frontend that touches AnchorProvider, Program,
+transaction signing, and RPC calls. Svelte components import these functions and never
+deal with Solana primitives directly.
+
+*Imports needed:*
+- Program, AnchorProvider from @coral-xyz/anchor
+- The IDL JSON from $lib/idl/neofit.json
+- getProvider and connection from $lib/wallet
+- PDA helpers from $lib/pdas
+
+*Helper to build internally:*
+- A function (not exported) that creates a Program instance from the IDL, program ID,
+  and the provider returned by getProvider(). Called at the top of every exported
+  function.
+
+*Functions to export:*
+
+- initializeUser() - derives the user profile PDA from the connected wallet, calls
+  program.methods.initializeUser().accounts({ userProfile, authority, systemProgram }).rpc().
+  Returns the transaction signature.
+
+- fetchUserProfile(authority: PublicKey) - derives the PDA, calls
+  program.account.userProfile.fetchNullable(pda). Returns the decoded account data
+  ({ username, totalReps, streakDays, repCounts, … }) or null if the account does
+  not exist yet.
+
+- updateUsername(newUsername: string) - derives PDA, calls
+  program.methods.updateUsername(newUsername).accounts({ userProfile, authority }).rpc().
+
+- logReps(exerciseId: number, count: number, challengeKey?: PublicKey) - derives user
+  profile PDA. If a challenge key is provided, also derives the enrollment PDA and passes
+  both as additional accounts. Calls
+  program.methods.logReps(exerciseId, count).accounts({…}).rpc().
+
+- joinChallenge(challengeKey: PublicKey) - derives enrollment PDA from the challenge
+  key and the connected wallet. Calls
+  program.methods.joinChallenge().accounts({…}).rpc().
+
+- claimReward(challengeKey: PublicKey) - derives enrollment PDA. Calls
+  program.methods.claimReward().accounts({…}).rpc().
+
+- fetchAllChallenges() - calls program.account.challenge.all(). Returns an array of
+  decoded Challenge account objects.
+
+- fetchEnrollment(challengeKey: PublicKey, userKey: PublicKey) - derives the enrollment
+  PDA, calls program.account.enrollment.fetchNullable(pda). Returns decoded data or
+  null.
+
+*Error handling:* Each function should catch Anchor/Solana errors and rethrow them as
+simple descriptive strings (e.g. "Wallet not connected", "Transaction failed: insufficient
+SOL", "Username too long"). Components display these in toast/banner UI.
+
+*How to test:* Tested in Step 9 together with the local validator.
+
+---
+
+### Step 8 - Start local validator, deploy, and airdrop
+
+*Prerequisites:* Solana CLI installed, anchor CLI installed, Phantom extension in
+your browser.
+
+*Terminal commands (run from workspace root):*
+
+1. Start a local validator: solana-test-validator (leave running in its own terminal).
+   Alternatively anchor localnet if configured.
+2. Build and deploy: anchor build && anchor deploy --provider.cluster localnet
+3. Verify deployment: solana program show BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5 --url localhost
+4. Airdrop to your Phantom address:
+   solana airdrop 5 <YOUR_PHANTOM_ADDRESS> --url localhost
+5. In Phantom: switch network to Localhost (Settings -> Developer Settings -> Change Network
+   -> Localhost, or add a Custom RPC with http://127.0.0.1:8899).
+6. Copy the IDL: cp target/idl/neofit.json app/src/lib/idl/neofit.json
+7. Start the frontend: cd app && npm run dev
+
+*How to test:* Open the app, connect Phantom, check that Phantom shows your airdropped
+SOL balance. The app should load without errors. No on-chain calls yet - that is the next
+step.
+
+---
+
+### Step 9 - Migrate Profile page
+
+*File to modify:* app/src/routes/profile/+page.svelte
+
+*What to change:*
+
+1. Remove imports of getUsername, setUsername from wallet.ts.
+2. Import fetchUserProfile, initializeUser, updateUsername from program.ts.
+3. Add an onMount (or $effect) block that runs when the wallet is connected:
+   - Call fetchUserProfile(walletPublicKey).
+   - If it returns null, the user has no on-chain profile yet. Show a "Create Profile"
+     button that calls initializeUser(). After the transaction confirms, re-fetch the
+     profile.
+   - If it returns data, populate username, totalReps, streakDays from the account
+     fields.
+4. Replace saveName(): instead of writing to localStorage, call
+   updateUsername(draft). Add a loading/spinner state while the transaction is in flight.
+   Show a success or error message after.
+5. Remove the hardcoded userStats object (lines 26-31).
+6. Remove the yellow "placeholder data" warning banner (lines 87-92).
+7. The editingName / draft UI state variables remain unchanged.
+8. The "Recent Ledger Activity" section can stay as hardcoded placeholder for now, or be
+   removed entirely. Real transaction history is a later enhancement.
+
+*How to test:*
+- Connect wallet, navigate to Profile.
+- If first visit: "Create Profile" button should appear. Click it -> Phantom popup ->
+  approve -> transaction confirms -> page shows default username and zero stats.
+- Click username to edit -> type new name -> Save -> Phantom popup -> approve -> new name
+  displayed.
+- Refresh page -> data persists (it is on-chain, not localStorage).
+- Disconnect wallet -> "Wallet Required" screen shows.
+
+---
+
+### Step 10 - Migrate Workout page
+
+*File to modify:* app/src/routes/workout/+page.svelte
+
+*What to change:*
+
+1. Import logReps from program.ts.
+2. Add a "Save to Chain" button below the existing "Reset Counter" button (or repurpose
+   reset). This button is enabled only when the wallet is connected and count > 0.
+3. When clicked: call logReps(cur.onChainId, count). cur.onChainId is already
+   available on every WorkoutDef object - no changes needed to the workout detection
+   layer.
+4. Show a loading state while the transaction is pending. Show a success message with the
+   transaction signature on completion. Show an error message on failure.
+5. After a successful save, reset the rep counter.
+6. If the wallet is not connected, the save button should either be hidden or show a
+   "Connect Wallet to Save" tooltip.
+7. Challenge-aware logging (passing challengeKey to logReps) is deferred to Step 13.
+   For now, reps are logged to the user profile only.
+
+*How to test:*
+- Connect wallet, ensure profile exists (from Step 9).
+- Select an exercise, perform some reps on camera.
+- Click "Save to Chain" -> Phantom popup -> approve -> transaction confirms.
+- Navigate to Profile page -> totalReps should have increased by the saved count.
+- The repCounts array on the profile should show the specific exercise's count too.
+
+---
+
+### Step 11 - Create a challenge seeding script
+
+*File to create:* scripts/seed-challenge.ts (or app/scripts/seed-challenge.ts)
+
+*Purpose:* The Challenges page needs at least one Challenge account on-chain to display.
+Since createChallenge requires the program authority (the deployer keypair), this cannot
+be done from the browser with Phantom. Write a Node/TS script that runs from the command
+line.
+
+*What the script does:*
+- Loads the deployer keypair from ~/.config/solana/id.json
+- Connects to localhost
+- Loads the IDL
+- Calls program.methods.createChallenge(…) with sample parameters: exercise
+  requirements (e.g. 100 squats), entry fee (e.g. 0.1 SOL), deadline (e.g. 48 hours from
+  now)
+- Prints the created Challenge PDA address and transaction signature
+
+*How to run:* npx tsx scripts/seed-challenge.ts (or npx ts-node with ESM config)
+
+*How to test:* After running, verify:
+solana account <CHALLENGE_PDA> --url localhost shows account data.
+
+---
+
+### Step 12 - Migrate Challenges page (display)
+
+*File to modify:* app/src/routes/challenges/+page.svelte
+
+*What to change:*
+
+1. Import fetchAllChallenges from program.ts.
+2. On mount (when wallet is connected): call fetchAllChallenges() and store the result
+   in component state.
+3. Replace the hardcoded sponsoredChallenges array with the fetched on-chain data. Map
+   account fields to the card UI: entry fee, prize pool (vault balance), exercise
+   requirements, deadline, active status.
+4. If no challenges exist on-chain yet, show an empty state message.
+5. The "Daily Calibration Routines" section can remain as client-side-only UX for now.
+
+*How to test:*
+- Run the seed script from Step 11 first.
+- Connect wallet, navigate to Challenges.
+- The seeded challenge should appear in the grid instead of the hardcoded Nike challenge.
+
+---
+
+### Step 13 - Migrate Challenges page (join + claim + challenge-aware workouts)
+
+*File to modify:* app/src/routes/challenges/+page.svelte
+
+*What to change:*
+
+1. Import joinChallenge, claimReward, fetchEnrollment from program.ts.
+2. For each displayed challenge, check whether the connected user is already enrolled by
+   calling fetchEnrollment(challengeKey, walletKey). If enrolled, show "Enrolled" badge
+   instead of "Join Pool" button.
+3. "Join Pool" button: on click, call joinChallenge(challengeKey). This sends the entry
+   fee and creates an Enrollment PDA. Show loading/success/error state.
+4. After successful join, store the challenge public key in a Svelte store (or
+   localStorage keyed by wallet address) so the Workout page can pick it up.
+5. Show a "Claim Reward" button when: the challenge deadline has passed AND the user's
+   enrollment shows requirements met. Calls claimReward(challengeKey).
+6. Show the user's progress toward challenge requirements (reps completed vs. required).
+
+*File to modify:* app/src/routes/workout/+page.svelte
+
+*Additional changes for challenge-aware logging:*
+- If the user is enrolled in a challenge (check the Svelte store or localStorage from
+  above), pass the challengeKey to logReps() so that program.ts derives the
+  enrollment PDA and includes it in the transaction accounts.
+- Optionally show a small indicator on the workout page ("Logging toward: Weekend Warrior
+  challenge").
+
+*How to test:*
+- Seed a challenge (Step 11).
+- Connect wallet, navigate to Challenges, click Join Pool -> Phantom popup -> approve.
+- Entry fee deducted from wallet balance.
+- Navigate to Workout, do reps for the required exercise, Save to Chain.
+- Navigate back to Challenges -> progress bar should reflect logged reps.
+- (If deadline passed and requirements met) Click Claim Reward -> SOL transferred.
+
+---
+
+### Step 14 - End-to-end smoke test
+
+*Full flow, in order:*
+
+1. Terminal A: solana-test-validator
+2. Terminal B: anchor build && anchor deploy --provider.cluster localnet
+3. Terminal B: cp target/idl/neofit.json app/src/lib/idl/neofit.json
+4. Terminal B: solana airdrop 5 <PHANTOM_ADDR> --url localhost
+5. Terminal B: npx tsx scripts/seed-challenge.ts
+6. Terminal C: cd app && npm run dev
+7. Browser: open app -> connect Phantom (on localhost network)
+8. Profile -> Create Profile -> verify zero stats
+9. Profile -> edit username -> save -> verify on-chain
+10. Workout -> select exercise -> do reps -> Save to Chain -> verify transaction
+11. Profile -> verify totalReps increased
+12. Challenges -> see seeded challenge -> Join Pool -> verify entry fee deducted
+13. Workout -> do reps for challenge exercise -> Save to Chain
+14. Challenges -> verify progress updated
+15. (After deadline) Claim Reward -> verify SOL received
+
+If any step fails, the error message from program.ts should tell you exactly what went
+wrong (account not found, insufficient SOL, wrong PDA, etc.).
+
+---
+
+### Step 15 - Cleanup
+
+*Files to modify:*
+- app/src/lib/wallet.ts - remove any remaining localStorage references, dead imports
+- app/src/routes/profile/+page.svelte - remove yellow placeholder banner if still
+  present, remove hardcoded userStats
+- app/src/routes/challenges/+page.svelte - remove hardcoded sponsoredChallenges and
+  dailyChallenges arrays
+- app/package.json - remove @anchor-lang/core if still listed
+- app/.env.example - confirm VITE_PUBLIC_WALLET_ADDRESS is removed
+
+*How to test:*
+- npm run check - no type errors
+- npm run build - production build succeeds
+- npm run lint - no warnings about unused imports or variables
+
+---
+
+## File Reference
+
+| File | Action | Step |
 |---|---|---|
-| `VITE_RPC_URL` | Solana RPC endpoint used by `wallet.ts` | `http://127.0.0.1:8899` |
-| `VITE_PUBLIC_WALLET_ADDRESS` | Remove once real adapter is wired | - |
+| app/.env | Create | 2 |
+| app/.env.example | Create | 2 |
+| app/src/lib/idl/neofit.json | Copy from target/idl/ | 3 |
+| app/src/lib/wallet.ts | Rewrite | 4 |
+| app/src/routes/+layout.svelte | Modify | 5 |
+| app/src/lib/pdas.ts | Create | 6 |
+| app/src/lib/program.ts | Create | 7 |
+| app/src/routes/profile/+page.svelte | Modify | 9 |
+| app/src/routes/workout/+page.svelte | Modify | 10, 13 |
+| scripts/seed-challenge.ts | Create | 11 |
+| app/src/routes/challenges/+page.svelte | Modify | 12, 13 |
+| app/vite.config.ts | Possibly modify (IDL alias) | 3 |
+| app/package.json | Modify (remove @anchor-lang/core) | 15 |
 
-Update `app/.env.example` to document `VITE_RPC_URL` and remove
-`VITE_PUBLIC_WALLET_ADDRESS`.
+## Packages Summary
 
+| Package | Purpose | Ecosystem |
+|---|---|---|
+| @coral-xyz/anchor | Anchor TS SDK - build instructions, send transactions, decode accounts | web3.js v1 |
+| @solana/web3.js | Core Solana types (PublicKey, Connection, Transaction) | v1 (installed) |
+| @svelte-on-solana/wallet-adapter-core | Svelte store wrapping wallet adapters | v1 (installed) |
+| @svelte-on-solana/wallet-adapter-ui | Optional UI components (WalletMultiButton, providers) | v1 (installed) |
+| @solana/wallet-adapter-wallets | Adapter classes for Phantom, Solflare, etc. | v1 (installed) |
+| @solana/kit | Peer dependency for Codama-generated client (not used directly) | v2 |
 
-## 2. Recommended Sequence
+## About the Generated Codama Client
 
-| Step | Command / Action |
-|---|---|
-| DONE: 1. Build program | `anchor build` |
-| DONE: 2. Generate client | `npm run codama` (workspace root) |
-| DONE: 3. Install wallet adapter | `cd app && npm install @svelte-on-solana/wallet-adapter-core ...` |
-| 4. Create `pdas.ts` | Manual - keep seeds in sync with `constants.rs` |
-| 5. Create `program.ts` | Manual - one wrapper per instruction |
-| 6. Migrate `wallet.ts` | Replace mock `connect()` with real adapter |
-| 7. Migrate Profile page | `fetchUserProfile` + `updateUsername` |
-| 8. Migrate Workout page | `logReps` on session end |
-| 9. Migrate Challenges page | `joinChallenge`, live account fetch |
-| 10. Deploy to Surfpool | Update `Anchor.toml` cluster URL, `anchor deploy` |
+The generated code at app/src/lib/generated/ remains in the repo. It is useful for:
+- Type definitions (UserProfile, Challenge, Enrollment, ExerciseCount)
+- Account discriminator constants
+- PDA seed byte documentation (the generated PDA files encode exact seed bytes)
 
-Steps 1–2 must be repeated together after any change to the Rust program. Steps 3–9 are
-independent of each other once the generated client and `program.ts` exist.
+You do not need to delete it. Just do not use its instruction builders or PDA finders
+directly in transaction code - use the Anchor Program methods instead, since those
+integrate with the v1 wallet adapter and AnchorProvider.
