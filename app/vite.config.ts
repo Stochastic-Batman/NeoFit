@@ -5,6 +5,12 @@ import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+	ssr: {
+		noExternal: ['@solana/wallet-adapter-phantom']
+	},
+	optimizeDeps: {
+		include: ['@solana/web3.js', '@coral-xyz/anchor', '@solana/wallet-adapter-phantom']
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

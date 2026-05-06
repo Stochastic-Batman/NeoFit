@@ -47,6 +47,7 @@
 		"@anchor-lang/core": "^1.0.1",
 		"@coral-xyz/anchor": "^0.32.1",
 		"@solana/kit": "^6.9.0",
+		"@solana/wallet-adapter-phantom": "^0.9.29",
 		"@solana/wallet-adapter-wallets": "^0.19.38",
 		"@solana/web3.js": "^1.98.4",
 		"@svelte-on-solana/wallet-adapter-core": "^1.0.11-alpha.0",

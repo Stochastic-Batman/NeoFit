@@ -1,6 +1,6 @@
 import { AnchorProvider } from '@coral-xyz/anchor'
 import { Connection, type PublicKey } from '@solana/web3.js'
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets'
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom'
 import { derived, writable } from 'svelte/store'
 
 
