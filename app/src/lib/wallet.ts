@@ -46,7 +46,7 @@ export const wallet = createWallet()
 export const displayAddress = derived(state, ($w) => {
 	if (!$w.connected || !$w.address) return 'Connect Wallet'
 	const a = $w.address
-	return ${a.slice(0, 4)}...${a.slice(-4)}
+	return `${a.slice(0, 4)}...${a.slice(-4)}`
 })
 
 export function getProvider(): AnchorProvider {
