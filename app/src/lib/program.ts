@@ -2,7 +2,7 @@ import { Program, type Idl } from '@coral-xyz/anchor'
 import { PublicKey, SystemProgram } from '@solana/web3.js'
 import { enrollmentPda, userProfilePda } from '$lib/pdas'
 import { getProvider } from '$lib/wallet'
-import idlJson from '$lib/idl/neofit.json'
+import idlJson from '../../../target/idl/neofit.json'
 
 const PROGRAM_ID = new PublicKey(
 	import.meta.env.VITE_PROGRAM_ID ?? 'BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5'
@@ -34,7 +34,7 @@ export async function initializeUser(): Promise<string> {
 			})
 			.rpc()
 	} catch (error) {
-		throw new Error(initializeUser failed: ${toErrorMessage(error)})
+		throw new Error(`initializeUser failed: ${toErrorMessage(error)}`)
 	}
 }
 
@@ -44,7 +44,7 @@ export async function fetchUserProfile(authority: PublicKey): Promise<any | null
 		const [userProfile] = userProfilePda(authority)
 		return await program.account.userProfile.fetchNullable(userProfile)
 	} catch (error) {
-		throw new Error(fetchUserProfile failed: ${toErrorMessage(error)})
+		throw new Error(`fetchUserProfile failed: ${toErrorMessage(error)}`)
 	}
 }
 
@@ -59,7 +59,7 @@ export async function updateUsername(newUsername: string): Promise<string> {
 			.accounts({ userProfile, authority })
 			.rpc()
 	} catch (error) {
-		throw new Error(updateUsername failed: ${toErrorMessage(error)})
+		throw new Error(`updateUsername failed: ${toErrorMessage(error)}`)
 	}
 }
 
@@ -89,7 +89,7 @@ export async function logReps(
 			.accounts(accounts)
 			.rpc()
 	} catch (error) {
-		throw new Error(logReps failed: ${toErrorMessage(error)})
+		throw new Error(`logReps failed: ${toErrorMessage(error)}`)
 	}
 }
 
@@ -111,7 +111,7 @@ export async function joinChallenge(challengeKey: PublicKey): Promise<string> {
 			})
 			.rpc()
 	} catch (error) {
-		throw new Error(joinChallenge failed: ${toErrorMessage(error)})
+		throw new Error(`joinChallenge failed: ${toErrorMessage(error)}`)
 	}
 }
 
@@ -131,7 +131,7 @@ export async function claimReward(challengeKey: PublicKey): Promise<string> {
 			})
 			.rpc()
 	} catch (error) {
-		throw new Error(claimReward failed: ${toErrorMessage(error)})
+		throw new Error(`claimReward failed: ${toErrorMessage(error)}`)
 	}
 }
 
@@ -140,7 +140,7 @@ export async function fetchAllChallenges(): Promise<any[]> {
 		const program = getProgram()
 		return await program.account.challenge.all()
 	} catch (error) {
-		throw new Error(fetchAllChallenges failed: ${toErrorMessage(error)})
+		throw new Error(`fetchAllChallenges failed: ${toErrorMessage(error)}`)
 	}
 }
 
@@ -150,6 +150,6 @@ export async function fetchEnrollment(challengeKey: PublicKey, userKey: PublicKe
 		const [enrollment] = enrollmentPda(challengeKey, userKey)
 		return await program.account.enrollment.fetchNullable(enrollment)
 	} catch (error) {
-		throw new Error(fetchEnrollment failed: ${toErrorMessage(error)})
+		throw new Error(`fetchEnrollment failed: ${toErrorMessage(error)}`)
 	}
 }
