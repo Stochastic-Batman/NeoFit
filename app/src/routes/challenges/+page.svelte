@@ -1,17 +1,48 @@
 <script lang="ts">
 	import { wallet } from '$lib/wallet'
+	import { fetchAllChallenges } from '$lib/program'
+	import { PublicKey } from '@solana/web3.js'
 
 	let selectedDaily = $state<string | null>(null)
-
-	const sponsoredChallenges = [
-		{ id: 1, brand: 'Nike', title: 'Weekend Warrior', task: '500 Squats in 48H', pool: '50 SOL', fee: '0.1 SOL', color: '#95389E' }
-	]
+	let challenges = $state<any[]>([])
+	let loadingChallenges = $state(false)
+	let challengeErr = $state('')
 
 	const dailyChallenges = [
 		{ id: 'd1', title: 'Morning Routine', task: '50 Pushups', reward: '+10 XP' },
 		{ id: 'd2', title: 'Leg Day Check-in', task: '100 Squats', reward: '+25 XP' },
 		{ id: 'd3', title: 'Endurance Block', task: '200 Jumping Jacks', reward: '+50 XP' }
 	]
+
+	$effect(() => {
+		if ($wallet.connected) {
+			loadChallenges()
+		} else {
+			challenges = []
+		}
+	})
+
+	async function loadChallenges() {
+		loadingChallenges = true
+		challengeErr = ''
+		try {
+			const result = await fetchAllChallenges()
+			challenges = result
+		} catch (e: any) {
+			challengeErr = e.message
+		} finally {
+			loadingChallenges = false
+		}
+	}
+
+	function formatLamports(lamports: number | bigint): string {
+		return (Number(lamports) / 1_000_000_000).toFixed(2)
+	}
+
+	function formatDeadline(ts: number | bigint): string {
+		const date = new Date(Number(ts) * 1000)
+		return date.toLocaleString()
+	}
 </script>
 
 {#if !$wallet.connected}
@@ -38,27 +69,42 @@
 		<section>
 			<h2 class="text-xs uppercase tracking-[0.3em] text-[#43D8C9] mb-6 flex items-center gap-2">
 				<span class="w-2 h-2 bg-[#43D8C9] rounded-full animate-pulse"></span>
-				Sponsored Tournaments
+				On-Chain Challenges
 			</h2>
 
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-				{#each sponsoredChallenges as challenge}
-					<div class="relative p-8 border border-[#95389E]/50 bg-gradient-to-br from-[#95389E]/10 to-transparent group overflow-hidden">
-						<div class="absolute top-0 right-0 bg-[#95389E] text-white text-[10px] uppercase font-bold px-3 py-1 font-orbitron">
-							Prize Pool: {challenge.pool}
+			{#if loadingChallenges}
+				<p class="text-white/40 font-mono text-sm animate-pulse">Loading challenges...</p>
+			{:else if challengeErr}
+				<p class="text-red-400 text-xs font-mono">{challengeErr}</p>
+			{:else if challenges.length === 0}
+				<div class="border border-white/10 p-8 text-center">
+					<p class="text-white/40 font-mono text-sm">No challenges on-chain yet.</p>
+					<p class="text-white/20 text-xs mt-2">Run the seed script to create one.</p>
+				</div>
+			{:else}
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+					{#each challenges as { publicKey, account }}
+						<div class="relative p-8 border border-[#95389E]/50 bg-gradient-to-br from-[#95389E]/10 to-transparent group overflow-hidden">
+							<div class="absolute top-0 right-0 bg-[#95389E] text-white text-[10px] uppercase font-bold px-3 py-1 font-orbitron">
+								Pool: {formatLamports(account.poolLamports)} SOL
+							</div>
+							<h3 class="font-orbitron text-2xl font-bold mb-2">{account.title}</h3>
+							<p class="text-white/50 text-xs font-mono mb-4">
+								Deadline: {formatDeadline(account.deadlineTs)}
+							</p>
+							<div class="mb-4 space-y-1">
+								{#each account.requirements as req}
+									<p class="text-white/70 text-sm">Exercise #{req.exerciseId}: {req.repTarget} reps</p>
+								{/each}
+							</div>
+							<div class="flex items-center justify-between mt-auto">
+								<span class="text-sm font-mono opacity-60">Entry: {formatLamports(account.entryFeeLamports)} SOL</span>
+								<span class="text-xs font-mono text-white/30">{account.isActive ? 'Active' : 'Inactive'}</span>
+							</div>
 						</div>
-						<p class="text-[#43D8C9] text-xs font-bold uppercase tracking-widest mb-1">{challenge.brand} Presents</p>
-						<h3 class="font-orbitron text-2xl font-bold mb-4">{challenge.title}</h3>
-						<p class="text-white/70 mb-8">{challenge.task}</p>
-						<div class="flex items-center justify-between mt-auto">
-							<span class="text-sm font-mono opacity-60">Entry: {challenge.fee}</span>
-							<button class="border border-[#95389E] px-6 py-2 font-orbitron text-xs uppercase tracking-widest hover:bg-[#95389E] transition-colors">
-								Join Pool
-							</button>
-						</div>
-					</div>
-				{/each}
-			</div>
+					{/each}
+				</div>
+			{/if}
 		</section>
 
 		<section>

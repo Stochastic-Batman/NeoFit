@@ -102,6 +102,23 @@ cd app && npm run dev
 3. After approving, your truncated address appears in the nav
 
 
+### 6. Seed a challenge (optional)
+
+Create an on-chain challenge so the Challenges page has data to display:
+
+```bash
+cd app/ && npx tsx scripts/seed-challenge.ts
+```
+
+Verify it was created:
+
+```bash
+solana account <CHALLENGE_PDA_ADDRESS> --url localhost
+```
+
+The script prints the Challenge PDA address after running.
+
+
 ## Supported Exercises
 
 All detection runs entirely in-browser. No video is recorded or uploaded.
