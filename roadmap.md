@@ -1,191 +1,133 @@
-# Frontend <-> Backend Integration Roadmap
+# Devnet Deployment Roadmap
 
-## Completed Steps
+## Step 1 - Configure Solana CLI for devnet
 
-- **Step 1** - Installed `@coral-xyz/anchor@0.32.x`, `@solana/kit@6.x`, `@solana/wallet-adapter-phantom` via `--legacy-peer-deps`
-- **Step 2** - Created `.env` and `.env.example` at repo root with `VITE_RPC_URL` and `VITE_PROGRAM_ID`
-- **Step 3** - Copied IDL to `app/src/lib/idl/neofit.json`; added `copy-idl` script to `package.json`
-- **Step 4** - Rewrote `app/src/lib/wallet.ts` with real Phantom adapter, `Connection`, `getProvider()`
-- **Step 5** - Layout unchanged (store shape preserved: `$wallet.connected`, `wallet.connect()`/`disconnect()`)
-- **Step 6** - Created `app/src/lib/pdas.ts` (PDA derivation for user_profile, challenge, enrollment)
-- **Step 7** - Created `app/src/lib/program.ts` (instruction wrappers + account fetchers)
-- **Vite fix** - Replaced `@solana/wallet-adapter-wallets` with `@solana/wallet-adapter-phantom` to avoid broken `@ledgerhq` ESM imports; updated `vite.config.ts` SSR/optimizeDeps
+I need to point my Solana CLI at devnet:
 
+```bash
+solana config set --url https://api.devnet.solana.com
+```
 
-## Step 8 - Start local validator, deploy, and airdrop (DONE)
+I verify with:
+```bash
+solana config get
+```
 
-**Prerequisites:** Solana CLI installed, `anchor` CLI installed, Phantom extension in your browser set to **Solana Localnet**.
-
-**Terminal commands (run from workspace root):**
-
-1. Start a local validator (leave running in its own terminal):
-   ```bash
-   solana-test-validator
-   ```
-
-2. Build and deploy:
-   ```bash
-   anchor build && anchor deploy --provider.cluster localnet
-   ```
-
-3. Verify deployment:
-   ```bash
-   solana program show BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5 --url localhost
-   ```
-
-4. Airdrop to your Phantom address:
-   ```bash
-   solana airdrop 5 <YOUR_PHANTOM_ADDRESS> --url localhost
-   ```
-
-5. In Phantom: confirm network is set to **Solana Localnet** (Developer Settings -> Testnet Mode -> select Solana Localnet).
-
-6. Start the frontend:
-   ```bash
-   cd app && npm run dev
-   ```
-
-**How to test:** Open the app, connect Phantom, check that Phantom shows your airdropped SOL balance. The app should load without errors. No on-chain calls yet - that is the next step.
+I should see `RPC URL: https://api.devnet.solana.com`.
 
 
+## Step 2 - Fund the deployer keypair on devnet
 
-## Step 9 - Migrate Profile page (DONE)
+My deployer keypair is at `~/.config/solana/id.json`. I need ~3 SOL for deployment fees.
 
-**File to modify:** `app/src/routes/profile/+page.svelte`
+```bash
+solana airdrop 5 --url devnet
+```
 
-**What to change:**
+> Devnet airdrops are limited to 5 SOL per request and may rate-limit. I can run multiple times or use https://faucet.solana.com.
 
-1. Remove imports of `getUsername`, `setUsername` from `wallet.ts`.
-2. Import `fetchUserProfile`, `initializeUser`, `updateUsername` from `$lib/program`.
-3. Add an `onMount` (or `$effect`) block that runs when the wallet is connected:
-   - Call `fetchUserProfile(walletPublicKey)`.
-   - If it returns `null`, show a "Create Profile" button that calls `initializeUser()`. After the transaction confirms, re-fetch the profile.
-   - If it returns data, populate `username`, `totalReps`, `streakDays` from the account fields.
-4. Replace `saveName()`: instead of writing to `localStorage`, call `updateUsername(draft)`. Add a loading/spinner state while the transaction is in flight.
-5. Remove the hardcoded `userStats` object.
-6. Remove the yellow "placeholder data" warning banner.
-7. The `editingName` / `draft` UI state variables remain unchanged.
-
-**How to test:**
-- Connect wallet, navigate to Profile.
-- If first visit: "Create Profile" button should appear. Click it -> Phantom popup -> approve -> page shows default username and zero stats.
-- Click username to edit -> type new name -> Save -> Phantom popup -> approve -> new name displayed.
-- Refresh page -> data persists (on-chain, not localStorage).
-- Disconnect wallet -> "Wallet Required" screen shows.
+I verify with:
+```bash
+solana balance --url devnet
+```
 
 
-## Step 10 - Migrate Workout page (DONE)
+## Step 3 - Add devnet cluster to `Anchor.toml`
 
-**File to modify:** `app/src/routes/workout/+page.svelte`
+I add a `[programs.devnet]` section so Anchor knows my program ID on devnet (same keypair, same address):
 
-**What to change:**
+```toml
+[programs.devnet]
+neofit = "BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5"
+```
 
-1. Import `logReps` from `$lib/program`.
-2. Add a "Save to Chain" button (enabled only when wallet connected and `count > 0`).
-3. When clicked: call `logReps(cur.onChainId, count)`.
-4. Show loading/success/error states.
-5. After successful save, reset the rep counter.
-6. If wallet not connected, hide button or show "Connect Wallet to Save" tooltip.
-7. Challenge-aware logging deferred to Step 13.
-
-**How to test:**
-- Connect wallet, ensure profile exists (from Step 9).
-- Select exercise, perform reps on camera.
-- Click "Save to Chain" -> Phantom popup -> approve -> transaction confirms.
-- Navigate to Profile -> `totalReps` increased.
+**File to modify:** `Anchor.toml`
 
 
+## Step 4 - Deploy to devnet
 
-## Step 11 - Create a challenge seeding script (DONE)
+```bash
+anchor build
+anchor deploy --provider.cluster devnet
+```
 
-**File to create:** `scripts/seed-challenge.ts`
+I verify with:
+```bash
+solana program show BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5 --url devnet
+```
 
-**What the script does:**
-- Loads deployer keypair from `~/.config/solana/id.json`
-- Connects to localhost
-- Loads the IDL
-- Calls `program.methods.createChallenge(…)` with sample parameters
-- Prints created Challenge PDA address and transaction signature
-
-**How to run:** `npx tsx scripts/seed-challenge.ts`
-
-**How to test:** `solana account <CHALLENGE_PDA> --url localhost` shows account data.
+I expect to see my program with my authority key, data length, and balance.
 
 
+## Step 5 - Update `.env` for devnet
 
-## Step 12 - Migrate Challenges page (display) (DONE)
+I change the repo-root `.env` to point at devnet:
 
-**File to modify:** `app/src/routes/challenges/+page.svelte`
+```env
+VITE_RPC_URL=https://api.devnet.solana.com
+VITE_PROGRAM_ID=BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5
+```
 
-**What to change:**
-
-1. Import `fetchAllChallenges` from `$lib/program`.
-2. On mount: call `fetchAllChallenges()` and store in component state.
-3. Replace hardcoded `sponsoredChallenges` with fetched on-chain data.
-4. If no challenges exist, show empty state message.
-
-**How to test:**
-- Run seed script from Step 11 first.
-- Connect wallet, navigate to Challenges.
-- Seeded challenge appears in the grid.
+My frontend will now connect to devnet instead of localhost.
 
 
+## Step 6 - Switch Phantom to devnet
 
-## Step 13 - Migrate Challenges page (join + claim + challenge-aware workouts) (DONE)
+1. I open Phantom -> Settings -> Developer Settings -> enable Testnet Mode
+2. I select **Solana Devnet** as the network
+3. I airdrop SOL to my Phantom address for transaction fees:
 
-**File to modify:** `app/src/routes/challenges/+page.svelte`
+```bash
+solana airdrop 2 <MY_PHANTOM_ADDRESS> --url devnet
+```
 
-1. Import `joinChallenge`, `claimReward`, `fetchEnrollment` from `$lib/program`.
-2. Check enrollment status per challenge; show "Enrolled" badge or "Join Pool" button.
-3. "Join Pool" -> calls `joinChallenge(challengeKey)`.
-4. "Claim Reward" button when deadline passed + requirements met.
-5. Show progress toward challenge requirements.
-
-**File to modify:** `app/src/routes/workout/+page.svelte`
-
-- Pass `challengeKey` to `logReps()` if enrolled in a challenge.
-
-**How to test:**
-- Seed a challenge -> Join Pool -> do reps -> Save to Chain -> verify progress -> Claim Reward.
+Or I use the Phantom built-in faucet (Settings -> Developer Settings -> "Request Airdrop").
 
 
+## Step 7 - Seed a challenge on devnet
 
-## Step 14 - End-to-end smoke test
+I update the seed script to use devnet RPC, or pass it as an environment variable.
 
-1. `solana-test-validator`
-2. `anchor build && anchor deploy --provider.cluster localnet`
-3. `cp target/idl/neofit.json app/src/lib/idl/neofit.json`
-4. `solana airdrop 5 <PHANTOM_ADDR> --url localhost`
-5. `npx tsx scripts/seed-challenge.ts`
-6. `cd app && npm run dev`
-7. Browser: connect Phantom (Localnet) -> Create Profile -> edit username -> workout -> save -> challenges -> join -> claim
+**File to modify:** `app/scripts/seed-challenge.ts`
 
+I change `RPC_URL` from `http://127.0.0.1:8899` to `https://api.devnet.solana.com` (or read from env).
 
+Then I run:
+```bash
+cd app && npx tsx scripts/seed-challenge.ts
+```
 
-## Step 15 - Cleanup
-
-- `app/src/lib/wallet.ts` - remove compatibility shims (`getUsername`/`setUsername`)
-- `app/src/routes/profile/+page.svelte` - remove placeholder banner
-- `app/src/routes/challenges/+page.svelte` - remove hardcoded arrays
-- `app/package.json` - remove `@anchor-lang/core`, `@solana/wallet-adapter-wallets`, `@svelte-on-solana/wallet-adapter-core`, `@svelte-on-solana/wallet-adapter-ui` (unused)
-- `.env.example` - confirm `VITE_PUBLIC_WALLET_ADDRESS` is removed
-
-**How to test:**
-- `npm run check` - no type errors
-- `npm run build` - production build succeeds
+I verify with:
+```bash
+solana account <CHALLENGE_PDA_ADDRESS> --url devnet
+```
 
 
+## Step 8 - Test the frontend on devnet
 
-## File Reference
+```bash
+cd app && npm run dev
+```
 
-| File | Action | Step |
-|---|---|---|
-| `app/src/lib/wallet.ts` | Done | 4 |
-| `app/src/lib/pdas.ts` | Done | 6 |
-| `app/src/lib/program.ts` | Done | 7 |
-| `app/src/lib/idl/neofit.json` | Done | 3 |
-| `app/vite.config.ts` | Done | fix |
-| `app/src/routes/profile/+page.svelte` | Modify | 9 |
-| `app/src/routes/workout/+page.svelte` | Modify | 10, 13 |
-| `scripts/seed-challenge.ts` | Create | 11 |
-| `app/src/routes/challenges/+page.svelte` | Modify | 12, 13 |
+1. I open `http://localhost:5173`
+2. I connect Phantom (on Devnet)
+3. I navigate to Profile -> Create Profile -> verify on-chain
+4. I navigate to Workout -> do reps -> Save to Chain -> verify `totalReps` on Profile
+5. I navigate to Challenges -> see seeded challenge -> Join Pool -> verify entry fee deducted
+6. I do reps for the challenge exercise -> Save to Chain -> verify progress
+7. (After deadline) I claim Reward
+
+**Key difference from localnet:** transactions take ~400ms instead of instant. My UI loading states become visible.
+
+
+## Step 9 - (Optional) Deploy frontend to Vercel/Netlify
+
+Since my frontend is a SvelteKit app with `adapter-auto`, I can deploy to Vercel or Netlify with zero config:
+
+1. I push to GitHub
+2. I connect the repo to Vercel
+3. I set build directory to `app`
+4. I set environment variables: `VITE_RPC_URL=https://api.devnet.solana.com`, `VITE_PROGRAM_ID=BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5`
+5. I deploy
+
+Users can then access my app at a public URL and interact with the devnet program using their Phantom wallet.
