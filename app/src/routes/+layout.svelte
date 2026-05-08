@@ -17,11 +17,7 @@
 
 	<nav class="w-full border-b border-white/5 backdrop-blur-md sticky top-0 z-50 bg-[#100303]/80">
 		<div class="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
-			<a href="/" class="flex items-center gap-3 group">
-				<div class="relative w-10 h-10 border border-white/10 flex items-center justify-center rotate-45 group-hover:border-[#43D8C9] transition-colors duration-500">
-					<div class="absolute w-6 h-6 border-t-2 border-r-2 border-[#95389E] -rotate-45 -translate-x-1 translate-y-1"></div>
-					<div class="absolute w-2 h-2 bg-[#43D8C9] rounded-full top-1 right-1"></div>
-				</div>
+			<a href="/" class="group">
 				<span class="font-orbitron font-black text-xl tracking-wider italic">
 					NEO<span class="text-[#95389E]">FIT</span>
 				</span>
