@@ -2,6 +2,8 @@
 
 A Solana-powered training dApp using body pose estimation to reward proper posture and training consistency. The frontend uses your webcam to verify exercises via computer vision. Verified reps are logged on the Solana blockchain and earn digital rewards.
 
+**Live on Solana Devnet** - Program ID: `BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5`
+
 
 ## Tech Stack
 
@@ -41,6 +43,13 @@ npm install --legacy-peer-deps
 
 Create a `.env` file at the **repo root** (not inside `app/` - Vite is configured with `envDir: '../'`):
 
+For **devnet** (default):
+```env
+VITE_RPC_URL=https://api.devnet.solana.com
+VITE_PROGRAM_ID=BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5
+```
+
+For **local development**:
 ```env
 VITE_RPC_URL=http://127.0.0.1:8899
 VITE_PROGRAM_ID=BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5
@@ -102,7 +111,35 @@ cd app && npm run dev
 3. After approving, your truncated address appears in the nav
 
 
-### 6. Seed a challenge (optional)
+### 6. Devnet Development (recommended)
+
+The program is already deployed to Solana Devnet. No local validator needed.
+
+**Set up:**
+```bash
+# Point Solana CLI at devnet
+solana config set --url https://api.devnet.solana.com
+
+# Ensure your deployer keypair is in place
+cp ~/PATH_TO_YOUR_KEYPAIR/my-keypair.json ~/.config/solana/id.json
+
+# Fund your wallet (will probably need to use https://faucet.solana.com)
+solana airdrop 2 --url devnet
+```
+
+**In Phantom:**
+1. Open Settings -> Developer Settings -> enable Testnet Mode
+2. Select **Solana Devnet** as the network
+
+**Start the frontend:**
+```bash
+cd app && npm run dev
+```
+
+Open `http://localhost:5173`, connect Phantom (on Devnet), and interact with the live program.
+
+
+### 7. Seed a challenge (optional)
 
 Create an on-chain challenge so the Challenges page has data to display:
 
@@ -110,10 +147,10 @@ Create an on-chain challenge so the Challenges page has data to display:
 cd app/ && npx tsx scripts/seed-challenge.ts
 ```
 
-Verify it was created:
+The script reads `RPC_URL` from its own config (defaults to devnet). Verify:
 
 ```bash
-solana account <CHALLENGE_PDA_ADDRESS> --url localhost
+solana account <CHALLENGE_PDA_ADDRESS> --url devnet
 ```
 
 The script prints the Challenge PDA address after running.

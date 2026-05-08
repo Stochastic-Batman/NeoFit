@@ -73,7 +73,7 @@ async function main() {
 
   console.log('  TX Signature:', tx)
   console.log('\nDone! Verify with:')
-  console.log(`  solana account ${challengePda.toBase58()} --url localhost`)
+  console.log(`  solana account ${challengePda.toBase58()} --url devnet`)
 }
 
 main().catch(console.error)
