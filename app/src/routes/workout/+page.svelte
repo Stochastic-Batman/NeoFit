@@ -4,6 +4,11 @@
 	import type { St } from '$lib/workouts'
 	import { wallet } from '$lib/wallet'
 	import { logReps } from '$lib/program'
+	import { PublicKey } from '@solana/web3.js'
+
+	let activeChallengeKey = $state<string | null>(
+	    typeof localStorage !== 'undefined' ? localStorage.getItem('activeChallengeKey') : null
+	)
 
 	// Save-to-chain state
 	let saving = $state(false)
@@ -16,7 +21,8 @@
 		saveMsg = ''
 		saveErr = ''
 		try {
-			const sig = await logReps(cur.onChainId, count)
+			const challengeKey = activeChallengeKey ? new PublicKey(activeChallengeKey) : undefined
+			const sig = await logReps(cur.onChainId, count, challengeKey)
 			saveMsg = `Saved! tx: ${sig.slice(0, 8)}…`
 			reset()
 		} catch (e: any) {
@@ -329,6 +335,20 @@
 					<p class="text-white/20 text-[10px] font-orbitron uppercase tracking-widest text-center">
 						Connect wallet to save reps
 					</p>
+				{/if}
+
+				<!-- Active challenge indicator -->
+				{#if activeChallengeKey && $wallet.connected}
+					<div class="border border-[#95389E]/30 bg-[#95389E]/5 p-3">
+						<p class="text-[10px] uppercase tracking-widest text-[#95389E] mb-1">Logging toward challenge</p>
+						<p class="text-white/50 text-xs font-mono">{activeChallengeKey.slice(0, 8)}…</p>
+						<button
+							type="button"
+							onclick={() => { activeChallengeKey = null; localStorage.removeItem('activeChallengeKey') }}
+							class="text-white/30 text-[10px] mt-1 hover:text-white/60 transition-colors">
+							✕ Clear
+						</button>
+					</div>
 				{/if}
 			</div>
 		</div>

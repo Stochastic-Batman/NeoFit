@@ -96,7 +96,7 @@
 
 
 
-## Step 11 - Create a challenge seeding script
+## Step 11 - Create a challenge seeding script (DONE)
 
 **File to create:** `scripts/seed-challenge.ts`
 
@@ -113,7 +113,7 @@
 
 
 
-## Step 12 - Migrate Challenges page (display)
+## Step 12 - Migrate Challenges page (display) (DONE)
 
 **File to modify:** `app/src/routes/challenges/+page.svelte`
 
@@ -131,7 +131,7 @@
 
 
 
-## Step 13 - Migrate Challenges page (join + claim + challenge-aware workouts)
+## Step 13 - Migrate Challenges page (join + claim + challenge-aware workouts) (DONE)
 
 **File to modify:** `app/src/routes/challenges/+page.svelte`
 

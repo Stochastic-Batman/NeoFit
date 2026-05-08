@@ -1,12 +1,16 @@
 <script lang="ts">
 	import { wallet } from '$lib/wallet'
-	import { fetchAllChallenges } from '$lib/program'
+	import { fetchAllChallenges, joinChallenge, claimReward, fetchEnrollment } from '$lib/program'
 	import { PublicKey } from '@solana/web3.js'
 
 	let selectedDaily = $state<string | null>(null)
 	let challenges = $state<any[]>([])
+	let enrollments = $state<Record<string, any>>({}) // keyed by challenge pubkey base58
 	let loadingChallenges = $state(false)
 	let challengeErr = $state('')
+	let actionLoading = $state<string | null>(null) // challenge pubkey currently being acted on
+	let actionErr = $state('')
+	let actionMsg = $state('')
 
 	const dailyChallenges = [
 		{ id: 'd1', title: 'Morning Routine', task: '50 Pushups', reward: '+10 XP' },
@@ -19,6 +23,7 @@
 			loadChallenges()
 		} else {
 			challenges = []
+			enrollments = {}
 		}
 	})
 
@@ -28,10 +33,52 @@
 		try {
 			const result = await fetchAllChallenges()
 			challenges = result
+			// Check enrollment for each challenge
+			if ($wallet.publicKey) {
+				const enrollMap: Record<string, any> = {}
+				for (const c of result) {
+					try {
+						const enrollment = await fetchEnrollment(c.publicKey, $wallet.publicKey)
+						if (enrollment) enrollMap[c.publicKey.toBase58()] = enrollment
+					} catch {}
+				}
+				enrollments = enrollMap
+			}
 		} catch (e: any) {
 			challengeErr = e.message
 		} finally {
 			loadingChallenges = false
+		}
+	}
+
+	async function handleJoin(challengeKey: PublicKey) {
+		actionLoading = challengeKey.toBase58()
+		actionErr = ''
+		actionMsg = ''
+		try {
+			const sig = await joinChallenge(challengeKey)
+			actionMsg = `Joined! tx: ${sig.slice(0, 8)}…`
+			// Reload to update enrollment status
+			await loadChallenges()
+		} catch (e: any) {
+			actionErr = e.message
+		} finally {
+			actionLoading = null
+		}
+	}
+
+	async function handleClaim(challengeKey: PublicKey) {
+		actionLoading = challengeKey.toBase58()
+		actionErr = ''
+		actionMsg = ''
+		try {
+			const sig = await claimReward(challengeKey)
+			actionMsg = `Claimed! tx: ${sig.slice(0, 8)}…`
+			await loadChallenges()
+		} catch (e: any) {
+			actionErr = e.message
+		} finally {
+			actionLoading = null
 		}
 	}
 
@@ -42,6 +89,10 @@
 	function formatDeadline(ts: number | bigint): string {
 		const date = new Date(Number(ts) * 1000)
 		return date.toLocaleString()
+	}
+
+	function isExpired(ts: number | bigint): boolean {
+		return Date.now() > Number(ts) * 1000
 	}
 </script>
 
@@ -66,6 +117,13 @@
 			<p class="text-white/50 text-sm">Select a challenge to calibrate the vision network.</p>
 		</header>
 
+		{#if actionMsg}
+			<p class="text-[#43D8C9] text-xs font-mono">{actionMsg}</p>
+		{/if}
+		{#if actionErr}
+			<p class="text-red-400 text-xs font-mono">{actionErr}</p>
+		{/if}
+
 		<section>
 			<h2 class="text-xs uppercase tracking-[0.3em] text-[#43D8C9] mb-6 flex items-center gap-2">
 				<span class="w-2 h-2 bg-[#43D8C9] rounded-full animate-pulse"></span>
@@ -84,6 +142,9 @@
 			{:else}
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 					{#each challenges as { publicKey, account }}
+						{@const keyStr = publicKey.toBase58()}
+						{@const enrollment = enrollments[keyStr]}
+						{@const expired = isExpired(account.deadlineTs)}
 						<div class="relative p-8 border border-[#95389E]/50 bg-gradient-to-br from-[#95389E]/10 to-transparent group overflow-hidden">
 							<div class="absolute top-0 right-0 bg-[#95389E] text-white text-[10px] uppercase font-bold px-3 py-1 font-orbitron">
 								Pool: {formatLamports(account.poolLamports)} SOL
@@ -91,15 +152,45 @@
 							<h3 class="font-orbitron text-2xl font-bold mb-2">{account.title}</h3>
 							<p class="text-white/50 text-xs font-mono mb-4">
 								Deadline: {formatDeadline(account.deadlineTs)}
+								{#if expired}<span class="text-red-400 ml-2">(Expired)</span>{/if}
 							</p>
 							<div class="mb-4 space-y-1">
-								{#each account.requirements as req}
-									<p class="text-white/70 text-sm">Exercise #{req.exerciseId}: {req.repTarget} reps</p>
+								{#each account.requirements as req, i}
+									{@const logged = enrollment?.repsLogged?.[i]?.count ?? 0}
+									<div class="flex items-center gap-2">
+										<p class="text-white/70 text-sm flex-1">Exercise #{req.exerciseId}: {req.repTarget} reps</p>
+										{#if enrollment}
+											<span class="text-[#43D8C9] text-xs font-mono">{logged}/{req.repTarget}</span>
+										{/if}
+									</div>
 								{/each}
 							</div>
-							<div class="flex items-center justify-between mt-auto">
+							<div class="flex items-center justify-between">
 								<span class="text-sm font-mono opacity-60">Entry: {formatLamports(account.entryFeeLamports)} SOL</span>
-								<span class="text-xs font-mono text-white/30">{account.isActive ? 'Active' : 'Inactive'}</span>
+
+								{#if enrollment}
+									{#if enrollment.rewardClaimed}
+										<span class="text-[#43D8C9] font-orbitron text-xs uppercase">Claimed ✓</span>
+									{:else if enrollment.completed && expired}
+										<button
+											onclick={() => handleClaim(publicKey)}
+											disabled={actionLoading === keyStr}
+											class="border border-[#43D8C9] text-[#43D8C9] font-orbitron text-[10px] uppercase tracking-widest px-4 py-2 hover:bg-[#43D8C9]/10 transition-colors disabled:opacity-50">
+											{actionLoading === keyStr ? '…' : 'Claim Reward'}
+										</button>
+									{:else}
+										<span class="text-[#95389E] font-orbitron text-xs uppercase">Enrolled</span>
+									{/if}
+								{:else if !expired && account.isActive}
+									<button
+										onclick={() => handleJoin(publicKey)}
+										disabled={actionLoading === keyStr}
+										class="border border-[#95389E] text-[#95389E] font-orbitron text-[10px] uppercase tracking-widest px-4 py-2 hover:bg-[#95389E]/10 transition-colors disabled:opacity-50">
+										{actionLoading === keyStr ? '…' : 'Join Pool'}
+									</button>
+								{:else}
+									<span class="text-xs font-mono text-white/30">{account.isActive ? 'Active' : 'Inactive'}</span>
+								{/if}
 							</div>
 						</div>
 					{/each}
