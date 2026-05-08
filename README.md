@@ -101,19 +101,6 @@ cd app && npm run dev
 2. Click "Connect Wallet" - Phantom popup should appear
 3. After approving, your truncated address appears in the nav
 
-### 6. Copy IDL after program changes
-
-Every time you modify the Rust program and run `anchor build`, re-copy the IDL:
-
-```bash
-cp target/idl/neofit.json app/src/lib/idl/neofit.json
-```
-
-Or use the convenience script from `app/`:
-```bash
-npm run copy-idl
-```
-
 
 ## Supported Exercises
 

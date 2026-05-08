@@ -12,7 +12,7 @@
 - **Vite fix** - Replaced `@solana/wallet-adapter-wallets` with `@solana/wallet-adapter-phantom` to avoid broken `@ledgerhq` ESM imports; updated `vite.config.ts` SSR/optimizeDeps
 
 
-## Next: Step 8 - Start local validator, deploy, and airdrop
+## Step 8 - Start local validator, deploy, and airdrop (DONE)
 
 **Prerequisites:** Solana CLI installed, `anchor` CLI installed, Phantom extension in your browser set to **Solana Localnet**.
 
@@ -40,12 +40,7 @@
 
 5. In Phantom: confirm network is set to **Solana Localnet** (Developer Settings -> Testnet Mode -> select Solana Localnet).
 
-6. Copy the IDL (if not already done):
-   ```bash
-   cp target/idl/neofit.json app/src/lib/idl/neofit.json
-   ```
-
-7. Start the frontend:
+6. Start the frontend:
    ```bash
    cd app && npm run dev
    ```
@@ -54,7 +49,7 @@
 
 
 
-## Step 9 - Migrate Profile page
+## Step 9 - Migrate Profile page (DONE)
 
 **File to modify:** `app/src/routes/profile/+page.svelte`
 
