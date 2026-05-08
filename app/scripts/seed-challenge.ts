@@ -12,7 +12,7 @@ const __dirname = dirname(__filename)
 const IDL_PATH = join(__dirname, '..', '..', 'target', 'idl', 'neofit.json')
 const KEYPAIR_PATH = join(homedir(), '.config', 'solana', 'id.json')
 const PROGRAM_ID = new PublicKey('BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5')
-const RPC_URL = 'http://127.0.0.1:8899'
+const RPC_URL = 'https://api.devnet.solana.com'
 
 
 async function main() {

@@ -8,6 +8,9 @@ skip-lint = false
 [programs.localnet]
 neofit = "BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5"
 
+[programs.devnet]
+neofit = "BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5"
+
 [provider]
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
