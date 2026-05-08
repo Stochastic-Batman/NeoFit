@@ -1,17 +1,28 @@
-import { Program, type Idl } from '@coral-xyz/anchor'
+import { Program } from '@anchor-lang/core'
 import { PublicKey, SystemProgram } from '@solana/web3.js'
 import { enrollmentPda, userProfilePda } from '$lib/pdas'
 import { getProvider } from '$lib/wallet'
 import idlJson from '../../../target/idl/neofit.json'
 
-const PROGRAM_ID = new PublicKey(
-	import.meta.env.VITE_PROGRAM_ID ?? 'BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5'
-)
+const PROGRAM_ID = new PublicKey(import.meta.env.VITE_PROGRAM_ID ?? 'BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5')
+
+function prepareIdl(raw: any): any {
+    if (!raw?.accounts || !raw?.types) return raw
+    const accounts = raw.accounts.map((account: any) => {
+        if (account.type) return account // already 0.x format, untouched
+        const typeDef = raw.types.find(
+            (t: any) => t.name.toLowerCase() === account.name.toLowerCase()
+        )
+        return typeDef ? { ...account, type: typeDef.type } : account
+    })
+    return { ...raw, accounts }
+}
 
 function getProgram() {
+        console.log('IDL accounts:', idlJson?.accounts?.length, 'types:', idlJson?.types?.length)
 	const provider = getProvider()
 	const ProgramCtor = Program as unknown as new (...args: any[]) => any
-	return new ProgramCtor(idlJson as Idl, PROGRAM_ID, provider)
+	return new ProgramCtor(prepareIdl(idlJson), provider)
 }
 
 function toErrorMessage(error: unknown): string {
