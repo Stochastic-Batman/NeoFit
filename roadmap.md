@@ -74,7 +74,7 @@
 - Disconnect wallet -> "Wallet Required" screen shows.
 
 
-## Step 10 - Migrate Workout page
+## Step 10 - Migrate Workout page (DONE)
 
 **File to modify:** `app/src/routes/workout/+page.svelte`
 

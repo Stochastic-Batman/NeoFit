@@ -9,7 +9,7 @@ const PROGRAM_ID = new PublicKey(import.meta.env.VITE_PROGRAM_ID ?? 'BWJXEiNyQv9
 function prepareIdl(raw: any): any {
     if (!raw?.accounts || !raw?.types) return raw
     const accounts = raw.accounts.map((account: any) => {
-        if (account.type) return account // already 0.x format, untouched
+        if (account.type) return account
         const typeDef = raw.types.find(
             (t: any) => t.name.toLowerCase() === account.name.toLowerCase()
         )
@@ -84,9 +84,11 @@ export async function logReps(
 		const authority = program.provider.wallet.publicKey as PublicKey
 		const [userProfile] = userProfilePda(authority)
 
-		const accounts: Record<string, PublicKey> = {
+		const accounts: Record<string, PublicKey | null> = {
 			userProfile,
-			authority
+			authority,
+			enrollment: null,
+			challenge: null
 		}
 
 		if (challengeKey) {

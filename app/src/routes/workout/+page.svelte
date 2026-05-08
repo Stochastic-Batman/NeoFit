@@ -3,6 +3,28 @@
 	import { workouts } from '$lib/workouts'
 	import type { St } from '$lib/workouts'
 	import { wallet } from '$lib/wallet'
+	import { logReps } from '$lib/program'
+
+	// Save-to-chain state
+	let saving = $state(false)
+	let saveMsg = $state('')
+	let saveErr = $state('')
+
+	async function handleSave() {
+		if (!$wallet.connected || count === 0) return
+		saving = true
+		saveMsg = ''
+		saveErr = ''
+		try {
+			const sig = await logReps(cur.onChainId, count)
+			saveMsg = `Saved! tx: ${sig.slice(0, 8)}…`
+			reset()
+		} catch (e: any) {
+			saveErr = e.message
+		} finally {
+			saving = false
+		}
+	}
 
 	// DOM refs
 	let vid = $state<HTMLVideoElement | null>(null)
@@ -283,7 +305,33 @@
 				>
 					Reset Counter
 				</button>
+
+				<!-- Save to Chain -->
+				{#if $wallet.connected}
+					<button
+						type="button"
+						onclick={handleSave}
+						disabled={saving || count === 0}
+						class="border py-3 font-orbitron text-xs uppercase tracking-widest transition-all
+							{count > 0 && !saving
+								? 'border-[#43D8C9] text-[#43D8C9] hover:bg-[#43D8C9]/10'
+								: 'border-white/10 text-white/20 cursor-not-allowed'}"
+					>
+						{saving ? 'Saving…' : 'Save to Chain'}
+					</button>
+					{#if saveMsg}
+						<p class="text-[#43D8C9] text-xs font-mono">{saveMsg}</p>
+					{/if}
+					{#if saveErr}
+						<p class="text-red-400 text-xs font-mono">{saveErr}</p>
+					{/if}
+				{:else}
+					<p class="text-white/20 text-[10px] font-orbitron uppercase tracking-widest text-center">
+						Connect wallet to save reps
+					</p>
+				{/if}
 			</div>
 		</div>
 	{/if}
 </div>
+
