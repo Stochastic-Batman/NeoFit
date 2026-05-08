@@ -69,12 +69,3 @@ export function getProvider(): AnchorProvider {
 	    skipPreflight: false
 	})
 }
-
-// Temporary compatibility shims until profile page is fully migrated to on-chain data.
-export function getUsername(_address: string): string {
-	return ''
-}
-
-export function setUsername(_address: string, _name: string) {
-	return
-}
