@@ -63,7 +63,11 @@ export function getProvider(): AnchorProvider {
 		signAllTransactions: adapter.signAllTransactions.bind(adapter)
 	}
 
-	return new AnchorProvider(connection, walletForAnchor as never, AnchorProvider.defaultOptions())
+	return new AnchorProvider(connection, walletForAnchor as never, {
+	    preflightCommitment: 'processed',
+	    commitment: 'confirmed',
+	    skipPreflight: false
+	})
 }
 
 // Temporary compatibility shims until profile page is fully migrated to on-chain data.

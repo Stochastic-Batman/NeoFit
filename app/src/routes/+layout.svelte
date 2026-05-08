@@ -2,6 +2,11 @@
 	import '../app.css'
 	import { page } from '$app/stores'
 	import { wallet, displayAddress } from '$lib/wallet'
+	import { Buffer } from 'buffer'
+
+	if (typeof globalThis.Buffer === 'undefined') {
+	    globalThis.Buffer = Buffer
+	}
 
 	let { children } = $props()
 </script>

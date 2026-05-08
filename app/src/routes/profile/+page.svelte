@@ -48,7 +48,11 @@
 			await initializeUser()
 			if ($wallet.publicKey) await loadProfile($wallet.publicKey)
 		} catch (e: any) {
-			error = e.message
+			if (e.message?.includes('already in use') || e.message?.includes('0x0')) {
+			    if ($wallet.publicKey) await loadProfile($wallet.publicKey)
+			} else {
+			    error = e.message
+			}
 		} finally {
 			loading = false
 		}
