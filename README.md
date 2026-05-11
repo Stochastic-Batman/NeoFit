@@ -2,6 +2,8 @@
 
 A Solana-powered training dApp using body pose estimation to reward proper posture and training consistency. The frontend uses your webcam to verify exercises via computer vision. Verified reps are logged on the Solana blockchain and earn digital rewards.
 
+Click here for the [pitch](https://youtu.be/Gmrnm7xdHh0?si=nOjUP5dTmI6kAtyY) and the [demo](https://youtu.be/Gmrnm7xdHh0?si=Ye8vZyxGqwktFv8D).
+
 **Live on Solana Devnet** - Program ID: `BWJXEiNyQv9h2f9Aq9HCw8NyvSbYitJ7ChyUhkR887o5`
 
 
