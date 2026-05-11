@@ -40,18 +40,19 @@ async function main() {
   const ProgramCtor = Program as unknown as new (...args: any[]) => any
   const program = new ProgramCtor(idlJson as Idl, provider)
 
-  const nonce = new BN(1)
-  const title = 'Weekend Warrior'
+  const nonce = new BN(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER))
+  const title = 'Monday Star'
   const requirements = [
-    { exerciseId: 0, repTarget: 100 },  // 100 squats
-    { exerciseId: 1, repTarget: 50 },   // 50 pushups
+    { exerciseId: 0, repTarget: 150 },
+    { exerciseId: 1, repTarget: 50 },
+    { exerciseId: 2, repTarget: 10 },
   ]
   const entryFee = new BN(100_000_000) // 0.1 SOL in lamports
   const deadline = new BN(Math.floor(Date.now() / 1000) + 48 * 60 * 60) // 48 hours from now
 
   // Derive challenge PDA
   const nonceBuf = Buffer.alloc(8)
-  nonceBuf.writeBigUInt64LE(BigInt(1))
+  nonceBuf.writeBigUInt64LE(BigInt(nonce.toString()))
   const [challengePda] = PublicKey.findProgramAddressSync(
     [Buffer.from('challenge'), authority.publicKey.toBuffer(), nonceBuf],
     PROGRAM_ID
